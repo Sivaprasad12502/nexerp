@@ -12,11 +12,12 @@
 4. [Core Principle: Tenant Isolation](#4-core-principle-tenant-isolation)
 5. [Repository Layout](#5-repository-layout)
 6. [Database Design Principles](#6-database-design-principles)
+   - [Shared pagination package](#shared-pagination-package-packagespagination)
 7. [Phase 1 — Auth, Tenant Context & RBAC](#7-phase-1--auth-tenant-context--rbac)
 8. [Phase 2 — Master Data](#8-phase-2--master-data)
 9. [Phase 3 — Document Engine](#9-phase-3--document-engine)
 10. [Phase 4 — Financial Modules](#10-phase-4--financial-modules)
-11. [Phase 5 — GST & Indian Tax Compliance](#11-phase-5--gst--indian-tax-compliance)
+11. [Phase 5 — Country-Based Tax System (India & UAE)](#11-phase-5--country-based-tax-system-india--uae)
 12. [Phase 6 — PDF, Email & Notifications](#12-phase-6--pdf-email--notifications)
 13. [Phase 7 — Dashboard & Reports](#13-phase-7--dashboard--reports)
 14. [Cross-Cutting Systems](#14-cross-cutting-systems)
@@ -40,9 +41,11 @@ Before writing a single line of code, internalise these principles. Every archit
 | **Permissions before features** | Bolting RBAC onto existing routes creates leaky surfaces. It must come first. |
 | **Single document engine** | Quotation, invoice, proforma, challan — same schema, different `document_type`. Prevents ~60% schema duplication. |
 | **Session-derived context only** | `businessId` is NEVER trusted from the client body. Always resolved from the validated session. |
+| **Keyset pagination** | One shared package `@repo/pagination` — every list (invoices, clients, contacts, products…) reuses the same cursor logic, schemas, and React hook. |
 | **Fail closed** | A missing permission or tenant context must throw, never silently pass. |
 | **Audit everything** | Financial systems have legal accountability requirements. Every mutation is logged. |
-| **India-first compliance** | GST, TDS, e-Invoice (IRN/QR), e-Way Bill, PAN, GSTIN — these are core features, not add-ons. |
+| **Country-driven tax** | Business selects **tax country** at setup (MVP: **India**, **UAE/Dubai**). Invoice editor, columns, calculations, and compliance load from that country’s tax provider — not hard-coded GST everywhere. |
+| **Domain boundaries** | Code folders **match the sidebar** (`sales-and-invoices`, `purchases-and-expenses`, `sales-crm-and-leads`, etc.) — not generic names like `billing` or a flat `modules/` list. |
 
 ---
 
@@ -58,7 +61,7 @@ Before writing a single line of code, internalise these principles. Every archit
 | Validation | **Zod** | Runtime + compile-time safety; use for all boundaries (forms, API, env) |
 | Forms | **React Hook Form + Zod resolver** | Uncontrolled inputs; minimal re-renders |
 | UI Components | **ShadCN UI** (Radix primitives) | Accessible, unstyled base; full design ownership |
-| Data Tables | **TanStack Table v8** | Server-side pagination, sorting, filtering |
+| Data Tables | **TanStack Table v8** | Server-side **keyset** pagination, sorting, filtering |
 | Cache / Queue | **Redis (Upstash) + BullMQ** | Job queues for PDF generation, emails, reminders |
 | File Storage | **AWS S3** (or Cloudflare R2) | Per-tenant key prefixing; pre-signed URLs; no public URLs |
 | Email | **Resend + React Email** | Transactional; reliable Indian delivery |
@@ -180,84 +183,313 @@ User A  (Business-1)           User B  (Business-2)
 
 ## 5. Repository Layout
 
-Use a monorepo. Shared packages prevent drift between web app and future mobile/API consumers.
+Use a **monorepo**. Folder and route names **match the sidebar dropdown** (Refrens-style) so navigation, URLs, and code stay aligned.
+
+### Naming rules
+
+| UI label (sidebar) | Folder / route slug | Example URL |
+|--------------------|---------------------|---------------|
+| Sales & Invoices | `sales-and-invoices` | `/sales-and-invoices/invoices` |
+| Clients & Prospects | `clients-and-prospects` | `/sales-and-invoices/clients-and-prospects` |
+| Purchases & Expenses | `purchases-and-expenses` | `/purchases-and-expenses/purchase-orders` |
+| Sales CRM & Leads | `sales-crm-and-leads` | `/sales-crm-and-leads/leads` |
+| Products & Inventory | `products-and-inventory` | `/products-and-inventory/products` |
+| Business Settings | `business-settings` | `/business-settings` |
+
+Use **kebab-case** for all paths. Drop `&` from slugs (`sales-and-invoices`, not `sales-&-invoices`).
+
+### Target structure (aligned to sidebar)
 
 ```
 root/
-├── apps/
-│   └── web/                          # Next.js 15 application
-│       ├── app/
-│       │   ├── (auth)/               # Public: login, register, forgot-password
-│       │   │   ├── login/
-│       │   │   ├── register/
-│       │   │   └── forgot-password/
-│       │   ├── (dashboard)/          # Protected: all app routes
-│       │   │   ├── layout.tsx        # Loads business + permissions into context
-│       │   │   ├── clients/
-│       │   │   ├── products/
-│       │   │   ├── quotations/
-│       │   │   ├── invoices/
-│       │   │   ├── payments/
-│       │   │   ├── reports/
-│       │   │   └── settings/
-│       │   └── api/
-│       │       ├── auth/[...nextauth]/
-│       │       └── webhooks/         # Razorpay, Stripe, etc.
-│       ├── components/               # Shared presentational UI
-│       ├── modules/                  # Feature modules (co-located logic)
-│       │   ├── auth/
-│       │   ├── tenants/
-│       │   ├── rbac/
-│       │   ├── clients/
-│       │   ├── products/
-│       │   ├── documents/            # Core document engine
-│       │   ├── payments/
-│       │   ├── gst/
-│       │   ├── reports/
-│       │   └── settings/
-│       ├── lib/
-│       │   ├── auth/
-│       │   │   ├── config.ts         # Auth.js configuration
-│       │   │   └── session.ts        # Session helpers
-│       │   ├── tenant/
-│       │   │   ├── context.ts        # Active business resolver
-│       │   │   └── prisma-extension.ts  # Tenant-scoped Prisma client
-│       │   ├── rbac/
-│       │   │   ├── permissions.ts    # Permission catalog
-│       │   │   └── check.ts         # can() helper
-│       │   ├── db/
-│       │   │   └── client.ts        # Prisma client singleton
-│       │   └── env.ts               # Validated environment variables
-│       ├── services/                 # Domain services
-│       │   ├── gst.service.ts
-│       │   ├── document-number.service.ts
-│       │   ├── pdf.service.ts
-│       │   └── email.service.ts
-│       ├── actions/                  # Next.js Server Actions
-│       │   ├── client.actions.ts
-│       │   ├── document.actions.ts
-│       │   └── payment.actions.ts
-│       └── middleware.ts
+├── apps/web/
+│   ├── app/
+│   │   ├── (auth)/
+│   │   │   ├── login/
+│   │   │   ├── register/
+│   │   │   └── forgot-password/
+│   │   │
+│   │   ├── (dashboard)/
+│   │   │   ├── layout.tsx              # Sidebar + business context
+│   │   │   │
+│   │   │   ├── dashboard/              # Dashboard
+│   │   │   │
+│   │   │   ├── contacts/               # Contacts
+│   │   │   │
+│   │   │   ├── sales-and-invoices/     # ▼ Sales & Invoices (dropdown)
+│   │   │   │   ├── clients-and-prospects/
+│   │   │   │   ├── quotations-and-estimates/
+│   │   │   │   ├── proforma-invoices/
+│   │   │   │   ├── invoices/
+│   │   │   │   ├── payment-receipts/
+│   │   │   │   ├── sales-orders/
+│   │   │   │   ├── delivery-challans/
+│   │   │   │   └── credit-notes/
+│   │   │   │
+│   │   │   ├── purchases-and-expenses/ # ▼ Purchases & Expenses (dropdown)
+│   │   │   │   ├── vendor-leads/
+│   │   │   │   ├── vendors-and-suppliers/
+│   │   │   │   ├── bills/              # "Purchases & Expenses" line items (avoid duplicate slug)
+│   │   │   │   ├── payout-receipts/
+│   │   │   │   ├── purchase-orders/
+│   │   │   │   ├── debit-notes/
+│   │   │   │   └── hire-best-vendors/  # optional / marketing
+│   │   │   │
+│   │   │   ├── accounting/             # ▼ Accounting (New) — POST-MVP
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── sales-crm-and-leads/    # ▼ Sales CRM & Leads — POST-MVP
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── products-and-inventory/ # ▼ Products & Inventory
+│   │   │   │   ├── products/
+│   │   │   │   ├── categories/
+│   │   │   │   └── stock/              # inventory slice — expand later
+│   │   │   │
+│   │   │   ├── reports/                # ▼ Reports
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── gst-reports/            # ▼ GST Reports (New) — IN only
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── workflows-and-automations/
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── banking-and-payments/
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── payroll-and-hrms/
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   ├── manage-team/
+│   │   │   │   └── .gitkeep
+│   │   │   │
+│   │   │   └── business-settings/      # Business Settings (gear)
+│   │   │       ├── profile/
+│   │   │       ├── taxes/
+│   │   │       ├── templates/
+│   │   │       └── users/
+│   │   │
+│   │   └── api/
+│   │       ├── auth/[...nextauth]/
+│   │       └── webhooks/
+│   │
+│   ├── modules/                        # ★ Same names as app routes (mirror sidebar)
+│   │   ├── core/                       # auth, tenants, rbac, audit (not in sidebar)
+│   │   ├── shared/
+│   │   │   └── documents/              # Single document engine (all document_type values)
+│   │   │       ├── engine/
+│   │   │       └── editor/             # Shared editor shell
+│   │   │
+│   │   ├── dashboard/
+│   │   ├── contacts/
+│   │   │
+│   │   ├── sales-and-invoices/
+│   │   │   ├── clients-and-prospects/
+│   │   │   ├── quotations-and-estimates/
+│   │   │   ├── proforma-invoices/
+│   │   │   ├── invoices/
+│   │   │   ├── payment-receipts/
+│   │   │   ├── sales-orders/
+│   │   │   ├── delivery-challans/
+│   │   │   └── credit-notes/
+│   │   │
+│   │   ├── purchases-and-expenses/
+│   │   │   ├── vendor-leads/
+│   │   │   ├── vendors-and-suppliers/
+│   │   │   ├── bills/
+│   │   │   ├── payout-receipts/
+│   │   │   ├── purchase-orders/
+│   │   │   └── debit-notes/
+│   │   │
+│   │   ├── accounting/
+│   │   ├── sales-crm-and-leads/
+│   │   ├── products-and-inventory/
+│   │   ├── reports/
+│   │   ├── gst-reports/
+│   │   ├── workflows-and-automations/
+│   │   ├── banking-and-payments/
+│   │   ├── payroll-and-hrms/
+│   │   ├── manage-team/
+│   │   └── business-settings/
+│   │
+│   ├── lib/                            # auth, tenant, rbac, db, env (no per-feature pagination)
+│   ├── config/
+│   │   └── navigation.ts               # Full sidebar tree (labels + slugs + RBAC)
+│   └── middleware.ts
 │
 ├── packages/
-│   ├── ui/                           # Shared ShadCN components
-│   ├── validations/                  # Zod schemas (shared across app)
-│   ├── database/                     # Prisma schema + generated client
-│   │   └── prisma/
-│   │       ├── schema.prisma
-│   │       └── models/
-│   │           ├── auth.prisma
-│   │           ├── tenant.prisma
-│   │           ├── rbac.prisma
-│   │           ├── client.prisma
-│   │           ├── product.prisma
-│   │           └── document.prisma
-│   └── types/                        # Shared TypeScript types
+│   ├── pagination/                     # ★ SHARED — keyset paginate (all list screens)
+│   │   └── src/
+│   │       ├── schemas.ts
+│   │       ├── cursor.ts
+│   │       ├── keyset-paginate.ts
+│   │       ├── sort-presets.ts
+│   │       ├── types.ts
+│   │       └── react/use-keyset-infinite-query.ts
+│   ├── ui/
+│   ├── validations/
+│   ├── calculations/
+│   ├── tax/
+│   ├── database/prisma/models/
+│   │   ├── core/
+│   │   ├── contacts/
+│   │   ├── sales-and-invoices/         # documents, clients, payments-in
+│   │   ├── purchases-and-expenses/     # vendors, bills, payments-out
+│   │   ├── products-and-inventory/
+│   │   ├── accounting/
+│   │   ├── sales-crm-and-leads/
+│   │   ├── gst-reports/
+│   │   └── ...
+│   └── types/
 │
 ├── docker-compose.yml
-├── .env.example
-└── turbo.json                        # Turborepo config
+└── turbo.json
 ```
+
+### Sidebar → folder map (full tree)
+
+| # | Sidebar (parent) | Sub-items (dropdown) | `app/` + `modules/` folder |
+|---|------------------|----------------------|----------------------------|
+| 1 | **Dashboard** | — | `dashboard/` |
+| 2 | **Contacts** | — | `contacts/` |
+| 3 | **Sales & Invoices** | Clients & Prospects | `sales-and-invoices/clients-and-prospects/` |
+| | | Quotation & Estimates | `sales-and-invoices/quotations-and-estimates/` |
+| | | Proforma Invoices | `sales-and-invoices/proforma-invoices/` |
+| | | Invoices | `sales-and-invoices/invoices/` |
+| | | Payment Receipts | `sales-and-invoices/payment-receipts/` |
+| | | Sales Orders | `sales-and-invoices/sales-orders/` |
+| | | Delivery Challans | `sales-and-invoices/delivery-challans/` |
+| | | Credit Notes | `sales-and-invoices/credit-notes/` |
+| 4 | **Purchases & Expenses** | Vendor Leads | `purchases-and-expenses/vendor-leads/` |
+| | | Vendors & Suppliers | `purchases-and-expenses/vendors-and-suppliers/` |
+| | | Purchases & Expenses | `purchases-and-expenses/bills/` |
+| | | Payout Receipts | `purchases-and-expenses/payout-receipts/` |
+| | | Purchase Orders | `purchases-and-expenses/purchase-orders/` |
+| | | Debit Notes | `purchases-and-expenses/debit-notes/` |
+| | | Hire The Best Vendors | `purchases-and-expenses/hire-best-vendors/` |
+| 5 | **Accounting** | *(sub-routes TBD)* | `accounting/` |
+| 6 | **Sales CRM & Leads** | *(sub-routes TBD)* | `sales-crm-and-leads/` |
+| 7 | **Products & Inventory** | *(sub-routes TBD)* | `products-and-inventory/` |
+| 8 | **Reports** | *(sub-routes TBD)* | `reports/` |
+| 9 | **GST Reports** | *(sub-routes TBD)* | `gst-reports/` |
+| 10 | **Workflows & Automations** | *(sub-routes TBD)* | `workflows-and-automations/` |
+| 11 | **Banking & Payments** | *(sub-routes TBD)* | `banking-and-payments/` |
+| 12 | **Payroll & HRMS** | — | `payroll-and-hrms/` |
+| 13 | **Manage Team** | *(sub-routes TBD)* | `manage-team/` |
+| 14 | **Business Settings** | profile, taxes, templates, users | `business-settings/` |
+
+> **Note:** UI label *Purchases & Expenses* (expense list) maps to folder `bills/` to avoid `purchases-and-expenses/purchases-and-expenses/`. Display name stays "Purchases & Expenses" in navigation config.
+
+### Shared document engine
+
+All sales and purchase documents use **one** `documents` table (`document_type` enum). Code lives in `modules/shared/documents/`; each sidebar item folder only adds **routes + thin UI**:
+
+```
+modules/shared/documents/          # engine, numbering, tax hook, PDF
+modules/sales-and-invoices/invoices/   # pages + invoice-specific actions
+modules/purchases-and-expenses/purchase-orders/
+```
+
+### `config/navigation.ts` (sidebar source of truth)
+
+```ts
+// config/navigation.ts
+
+export type NavItem = {
+  id: string;
+  label: string;
+  href?: string;
+  permission?: string;
+  enabled: boolean;
+  badge?: 'new';
+  children?: NavItem[];
+};
+
+export const sidebarNavigation: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', href: '/dashboard', permission: 'dashboard.view', enabled: true },
+  { id: 'contacts', label: 'Contacts', href: '/contacts', permission: 'contact.view', enabled: true },
+  {
+    id: 'sales-and-invoices',
+    label: 'Sales & Invoices',
+    enabled: true,
+    children: [
+      { id: 'clients-and-prospects', label: 'Clients & Prospects', href: '/sales-and-invoices/clients-and-prospects', permission: 'client.view', enabled: true },
+      { id: 'quotations-and-estimates', label: 'Quotation & Estimates', href: '/sales-and-invoices/quotations-and-estimates', permission: 'document.view', enabled: true },
+      { id: 'proforma-invoices', label: 'Proforma Invoices', href: '/sales-and-invoices/proforma-invoices', permission: 'document.view', enabled: false },
+      { id: 'invoices', label: 'Invoices', href: '/sales-and-invoices/invoices', permission: 'document.view', enabled: true },
+      { id: 'payment-receipts', label: 'Payment Receipts', href: '/sales-and-invoices/payment-receipts', permission: 'payment.view', enabled: true },
+      { id: 'sales-orders', label: 'Sales Orders', href: '/sales-and-invoices/sales-orders', permission: 'document.view', enabled: false },
+      { id: 'delivery-challans', label: 'Delivery Challans', href: '/sales-and-invoices/delivery-challans', permission: 'document.view', enabled: false },
+      { id: 'credit-notes', label: 'Credit Notes', href: '/sales-and-invoices/credit-notes', permission: 'document.view', enabled: false },
+    ],
+  },
+  {
+    id: 'purchases-and-expenses',
+    label: 'Purchases & Expenses',
+    enabled: false,
+    children: [
+      { id: 'vendor-leads', label: 'Vendor Leads', href: '/purchases-and-expenses/vendor-leads', permission: 'vendor.view', enabled: false },
+      { id: 'vendors-and-suppliers', label: 'Vendors & Suppliers', href: '/purchases-and-expenses/vendors-and-suppliers', permission: 'vendor.view', enabled: false },
+      { id: 'bills', label: 'Purchases & Expenses', href: '/purchases-and-expenses/bills', permission: 'bill.view', enabled: false },
+      { id: 'payout-receipts', label: 'Payout Receipts', href: '/purchases-and-expenses/payout-receipts', permission: 'payout.view', enabled: false },
+      { id: 'purchase-orders', label: 'Purchase Orders', href: '/purchases-and-expenses/purchase-orders', permission: 'document.view', enabled: false },
+      { id: 'debit-notes', label: 'Debit Notes', href: '/purchases-and-expenses/debit-notes', permission: 'document.view', enabled: false },
+    ],
+  },
+  { id: 'accounting', label: 'Accounting', href: '/accounting', permission: 'accounting.view', enabled: false, badge: 'new' },
+  { id: 'sales-crm-and-leads', label: 'Sales CRM & Leads', href: '/sales-crm-and-leads', permission: 'crm.view', enabled: false },
+  { id: 'products-and-inventory', label: 'Products & Inventory', href: '/products-and-inventory/products', permission: 'product.view', enabled: true },
+  { id: 'reports', label: 'Reports', href: '/reports', permission: 'report.view', enabled: false },
+  { id: 'gst-reports', label: 'GST Reports', href: '/gst-reports', permission: 'gst.report.view', enabled: false, badge: 'new' },
+  { id: 'workflows-and-automations', label: 'Workflows & Automations', href: '/workflows-and-automations', permission: 'workflow.view', enabled: false },
+  { id: 'banking-and-payments', label: 'Banking & Payments', href: '/banking-and-payments', permission: 'banking.view', enabled: false, badge: 'new' },
+  { id: 'payroll-and-hrms', label: 'Payroll & HRMS', href: '/payroll-and-hrms', permission: 'payroll.view', enabled: false, badge: 'new' },
+  { id: 'manage-team', label: 'Manage Team', href: '/manage-team', permission: 'team.view', enabled: false, badge: 'new' },
+  { id: 'business-settings', label: 'Business Settings', href: '/business-settings', permission: 'settings.view', enabled: true },
+];
+```
+
+Set `enabled: true` per item as each feature ships. Sidebar component renders this tree recursively.
+
+### MVP vs later (from sidebar)
+
+| MVP (build first) | Later (`enabled: false` in nav) |
+|-------------------|----------------------------------|
+| Dashboard, Contacts | Accounting, GST Reports |
+| Sales & Invoices: clients, quotations, invoices, payment receipts | Proforma, sales orders, challans, credit notes |
+| Products & Inventory (products only) | Full stock, purchases dropdown, CRM |
+| Business Settings | Banking, Payroll, Workflows, Manage Team |
+
+### Co-located actions (per sidebar item)
+
+```
+modules/sales-and-invoices/invoices/
+  ├── invoice.actions.ts          # listInvoices → keysetPaginate from @repo/pagination
+  ├── components/
+  └── hooks/use-invoice-list.ts   # useKeysetInfiniteQuery from @repo/pagination/react
+
+packages/pagination/              # ★ shared — NOT duplicated per module
+
+modules/shared/documents/
+  ├── document.service.ts
+  ├── list-documents.ts           # optional factory for all document_type lists
+  └── document-number.service.ts
+```
+
+**Convention:** Routes in `app/(dashboard)/...`; business logic in `modules/<same-path>/`. **Pagination always from `@repo/pagination`.**
+
+### Prisma model folders (match sidebar domains)
+
+| Prisma folder | Tables (examples) |
+|---------------|-------------------|
+| `models/core/` | users, businesses, roles |
+| `models/contacts/` | contacts, contact_links |
+| `models/sales-and-invoices/` | clients, documents (sales types), payments |
+| `models/purchases-and-expenses/` | vendors, bills, payout_receipts |
+| `models/products-and-inventory/` | products, categories, stock |
+| `models/sales-crm-and-leads/` | leads, pipeline_stages |
+| `models/accounting/` | chart_of_accounts, journal_entries |
 
 ---
 
@@ -277,7 +509,210 @@ updatedAt  DateTime @updatedAt @map("updated_at")
 deletedAt  DateTime? @map("deleted_at")  // soft delete on operational tables
 
 @@index([businessId])
-@@index([businessId, createdAt])   // for pagination
+@@index([businessId, createdAt, id])   // keyset pagination (sort + tie-breaker)
+```
+
+### Keyset pagination (mandatory for lists)
+
+Use **keyset (seek) pagination** — not offset/`skip` — for all tenant-owned list endpoints (invoices, clients, products, documents, contacts, audit logs).
+
+| Approach | Query shape | Problem on large tables |
+|----------|-------------|-------------------------|
+| **Offset** | `OFFSET 50000 LIMIT 20` | Scans/skips rows; slow and unstable if rows insert/delete while paging |
+| **Keyset** | `WHERE (created_at, id) < ($cursorTs, $cursorId) ORDER BY created_at DESC, id DESC LIMIT 20` | Constant time with index; stable pages |
+
+**Rules:**
+
+1. Always filter by `businessId` first (tenant isolation).
+2. Always use a **unique tie-breaker**: composite sort `(sortField, id)` — never sort by `createdAt` alone.
+3. Default sort: `createdAt DESC, id DESC` (newest first).
+4. Max page size: **50** (default **20**); reject larger `limit` values.
+5. Cursor is **opaque** to the client (base64url JSON or signed string) — encodes sort field values + `id`, not raw SQL.
+6. Do not support random page jumps (page 47) in MVP — **Next / Previous** only. Offset is allowed only for tiny static lists (under 500 rows total) if ever needed.
+
+**Indexes** (required per list table):
+
+```sql
+-- Default list (newest first)
+CREATE INDEX idx_documents_business_created_id
+  ON documents(business_id, created_at DESC, id DESC);
+
+-- Filtered list (e.g. status = SENT)
+CREATE INDEX idx_documents_business_status_created_id
+  ON documents(business_id, status, created_at DESC, id DESC);
+```
+
+In Prisma schema:
+
+```prisma
+@@index([businessId, createdAt, id])
+@@index([businessId, status, createdAt, id])
+```
+
+### Shared pagination package (`packages/pagination`)
+
+**Do not copy pagination logic into each module.** All list Server Actions and list UIs import from `@repo/pagination`.
+
+#### Package layout
+
+```text
+packages/pagination/
+├── package.json                    # name: "@repo/pagination"
+├── tsconfig.json
+└── src/
+    ├── index.ts                    # re-exports public API
+    ├── types.ts                    # PaginatedResponse<T>, PageInfo, KeysetSort
+    ├── schemas.ts                  # paginationInputSchema, paginatedResponseSchema
+    ├── cursor.ts                   # encodeCursor / decodeCursor (generic sort keys + id)
+    ├── sort-presets.ts             # DEFAULT_SORT, SORT_ALLOWLIST per resource
+    ├── keyset-paginate.ts          # keysetPaginate() — single Prisma list implementation
+    └── react/
+        └── use-keyset-infinite-query.ts
+```
+
+#### Public API (import everywhere)
+
+```ts
+// Server (Server Actions, services)
+import {
+  paginationInputSchema,
+  keysetPaginate,
+  type PaginatedResponse,
+  type PaginationInput,
+} from '@repo/pagination';
+
+// Client (list pages, TanStack Table)
+import { useKeysetInfiniteQuery } from '@repo/pagination/react';
+```
+
+#### Reuse in every sidebar section
+
+Each feature only supplies **what is unique**: `where`, `select`, optional filters. Pagination is always the same.
+
+| Sidebar / module | List action file | Extends `paginationInputSchema` with |
+|----------------|------------------|--------------------------------------|
+| Contacts | `modules/contacts/contact.actions.ts` → `listContacts` | `search?` |
+| Clients & Prospects | `modules/sales-and-invoices/clients-and-prospects/client.actions.ts` → `listClients` | `search?`, `status?` |
+| Invoices | `modules/sales-and-invoices/invoices/invoice.actions.ts` → `listInvoices` | `status?`, `clientId?` |
+| Quotation & Estimates | `modules/.../quotations-and-estimates/quotation.actions.ts` → `listQuotations` | `status?` |
+| Proforma Invoices | `modules/.../proforma-invoices/` → `listProformas` | `status?` |
+| Payment Receipts | `modules/.../payment-receipts/` → `listPayments` | `method?`, `dateFrom?` |
+| Sales Orders | `modules/.../sales-orders/` → `listSalesOrders` | `status?` |
+| Delivery Challans | `modules/.../delivery-challans/` → `listChallans` | `status?` |
+| Credit Notes | `modules/.../credit-notes/` → `listCreditNotes` | `status?` |
+| Products | `modules/products-and-inventory/products/` → `listProducts` | `categoryId?`, `search?` |
+| Vendors | `modules/purchases-and-expenses/vendors-and-suppliers/` → `listVendors` | `search?` |
+| Purchase Orders | `modules/.../purchase-orders/` → `listPurchaseOrders` | `status?` |
+| Bills / Expenses | `modules/.../bills/` → `listBills` | `status?` |
+| Audit (admin) | `modules/core/audit/` → `listAuditLogs` | `action?`, `userId?` |
+| Manage Team | `modules/manage-team/` → `listTeamMembers` | small list — still use shared helper |
+
+**Rule:** If it is a table with more than one screen of rows → `keysetPaginate` from `@repo/pagination`.
+
+#### Server Action pattern (copy-paste shape per module)
+
+```ts
+// modules/sales-and-invoices/invoices/invoice.actions.ts
+'use server';
+
+import { paginationInputSchema, keysetPaginate } from '@repo/pagination';
+import { z } from 'zod';
+
+export const listInvoicesSchema = paginationInputSchema.extend({
+  status: z.enum(['DRAFT', 'SENT', 'PAID', /* ... */]).optional(),
+  clientId: z.string().uuid().optional(),
+});
+
+export async function listInvoices(input: z.infer<typeof listInvoicesSchema>) {
+  const session = await requirePermission(PERMISSIONS.INVOICE_VIEW);
+  const { cursor, limit, status, clientId } = listInvoicesSchema.parse(input);
+
+  return keysetPaginate({
+    model: prisma.document,
+    where: {
+      businessId: session.activeBusinessId,
+      documentType: 'INVOICE',
+      deletedAt: null,
+      ...(status && { status }),
+      ...(clientId && { clientId }),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    cursor,
+    limit,
+    select: invoiceListSelect,  // defined once per module — slim columns only
+  });
+}
+```
+
+Other document types (`listQuotations`, `listCreditNotes`, …) are the **same call** with different `documentType` and `select` — consider a thin factory:
+
+```ts
+// modules/shared/documents/list-documents.ts
+export function listDocumentsByType(type: DocumentType, input: ListDocumentsInput) {
+  return keysetPaginate({ /* shared where + documentType */ });
+}
+```
+
+#### Client hook pattern (same in every list page)
+
+```ts
+// packages/pagination/src/react/use-keyset-infinite-query.ts
+
+export function useKeysetInfiniteQuery<T>(options: {
+  queryKey: unknown[];
+  queryFn: (cursor?: string) => Promise<PaginatedResponse<T>>;
+}) {
+  return useInfiniteQuery({
+    queryKey: options.queryKey,
+    queryFn: ({ pageParam }) => options.queryFn(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.pageInfo.nextCursor ?? undefined,
+  });
+}
+```
+
+```ts
+// modules/sales-and-invoices/invoices/hooks/use-invoice-list.ts
+import { useKeysetInfiniteQuery } from '@repo/pagination/react';
+import { listInvoices } from '../invoice.actions';
+
+export function useInvoiceList(filters: InvoiceListFilters) {
+  return useKeysetInfiniteQuery({
+    queryKey: ['invoices', filters],
+    queryFn: (cursor) => listInvoices({ ...filters, cursor }),
+  });
+}
+```
+
+Reuse the same hook for clients, products, contacts — only `queryKey`, `queryFn`, and filters change.
+
+#### Shared UI component (optional)
+
+```text
+packages/ui/src/data-table/
+  ├── keyset-data-table.tsx     # TanStack Table + Load more / infinite scroll
+  └── list-page-shell.tsx       # title, filters slot, table slot
+```
+
+Every list page:
+
+```tsx
+<KeysetDataTable
+  columns={invoiceColumns}
+  query={useInvoiceList(filters)}
+  emptyState={<EmptyInvoices />}
+/>
+```
+
+#### `package.json` dependency
+
+```json
+// apps/web/package.json
+{
+  "dependencies": {
+    "@repo/pagination": "workspace:*"
+  }
+}
 ```
 
 ### Why soft delete?
@@ -294,7 +729,7 @@ Use `uuid()` (v4) for all PKs. Never use auto-increment integers — they leak r
 -- Add on every tenant table:
 CREATE INDEX idx_{table}_business_id ON {table}(business_id);
 CREATE INDEX idx_{table}_business_status ON {table}(business_id, status);
-CREATE INDEX idx_{table}_business_created ON {table}(business_id, created_at DESC);
+CREATE INDEX idx_{table}_business_created_id ON {table}(business_id, created_at DESC, id DESC);
 
 -- For document lookups:
 CREATE UNIQUE INDEX idx_documents_number ON documents(business_id, document_number, document_type);
@@ -418,14 +853,18 @@ export async function register(input: RegisterInput) {
       data: { email: parsed.email, name: parsed.name, passwordHash },
     });
 
-    // 3. Create default business (isolated workspace)
+    // 3. Create default business — tax country drives entire tax system (MVP: IN | AE)
+    const taxCountry = parsed.taxCountry ?? 'IN'; // 'IN' = India, 'AE' = UAE (Dubai)
     const business = await tx.business.create({
       data: {
         name: parsed.businessName ?? `${parsed.name}'s Business`,
-        currency: 'INR',
-        country: 'IN',
+        taxCountry,
+        country: taxCountry,
+        currency: taxCountry === 'AE' ? 'AED' : 'INR',
       },
     });
+    // Seed default tax rates + field/column profile for taxCountry (see Phase 5)
+    await seedTaxProfileForBusiness(tx, business.id, taxCountry);
 
     // 4. Assign owner role
     const ownerRole = await tx.role.findFirstOrThrow({
@@ -463,21 +902,32 @@ export async function register(input: RegisterInput) {
 // packages/database/prisma/models/tenant.prisma
 
 model Business {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String     @id @default(uuid()) @db.Uuid
   name        String
-  legalName   String?  @map("legal_name")
+  legalName   String?    @map("legal_name")
+
+  // Tax country — which system loads on invoices (MVP: IN, AE)
+  taxCountry    TaxCountry @default(IN) @map("tax_country")
+
+  // India-specific
   gstin       String?
   pan         String?
+  stateCode   String?    @map("state_code")  // GST state code
+
+  // UAE-specific (Dubai / Emirates)
+  trn         String?    // Tax Registration Number (15 digits)
+  emirate     String?    // e.g. "Dubai", "Abu Dhabi"
+
   email       String?
   phone       String?
   address     String?
   city        String?
   state       String?
-  country     String   @default("IN")
+  country     String     @default("IN")  // ISO 3166-1 alpha-2 (same as taxCountry for MVP)
   pincode     String?
-  currency    String   @default("INR")
-  logoUrl     String?  @map("logo_url")
-  settings    Json     @default("{}")  // theme, invoice prefix, fiscal year, etc.
+  currency    String     @default("INR")  // INR for IN, AED for AE
+  logoUrl     String?    @map("logo_url")
+  settings    Json       @default("{}")  // theme, invoice prefix, fiscal year, etc.
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -487,7 +937,13 @@ model Business {
   documents   Document[]
   // ... all tenant-owned relations
 
+  @@index([taxCountry])
   @@map("businesses")
+}
+
+enum TaxCountry {
+  IN   // India — GST (CGST / SGST / IGST)
+  AE   // United Arab Emirates — VAT (incl. Dubai)
 }
 
 model BusinessUser {
@@ -799,6 +1255,8 @@ Build only after Phase 1 passes isolation review.
 
 ### 8.1 Clients
 
+Client tax fields depend on the **business’s `taxCountry`** (UI shows GSTIN/PAN for India, TRN for UAE). Same `clients` table; optional fields left null when not applicable.
+
 ```prisma
 model Client {
   id            String   @id @default(uuid()) @db.Uuid
@@ -806,8 +1264,9 @@ model Client {
   name          String
   email         String?
   phone         String?
-  gstin         String?
-  pan           String?
+  gstin         String?  // IN
+  pan           String?  // IN
+  trn           String?  // AE — client TRN when B2B
   taxTreatment  TaxTreatment @default(REGISTERED) @map("tax_treatment")
   addressLine1  String?  @map("address_line_1")
   addressLine2  String?  @map("address_line_2")
@@ -872,25 +1331,26 @@ model Product {
 }
 
 model TaxRate {
-  id         String   @id @default(uuid()) @db.Uuid
-  businessId String   @map("business_id") @db.Uuid
-  name       String   // e.g. "GST 18%"
-  rate       Decimal  @db.Decimal(5, 2)
-  type       TaxType  @default(GST)
-  cgst       Decimal? @db.Decimal(5, 2)  // half of rate for intra-state
-  sgst       Decimal? @db.Decimal(5, 2)  // half of rate for intra-state
-  igst       Decimal? @db.Decimal(5, 2)  // full rate for inter-state
-  isDefault  Boolean  @default(false) @map("is_default")
+  id         String     @id @default(uuid()) @db.Uuid
+  businessId String     @map("business_id") @db.Uuid
+  taxCountry TaxCountry @map("tax_country")  // must match business.taxCountry
+  name       String     // e.g. "GST 18%" (IN) or "VAT 5%" (AE)
+  rate       Decimal    @db.Decimal(5, 2)
+  type       TaxType    @default(GST)
+  cgst       Decimal?   @db.Decimal(5, 2)  // IN only: half of rate intra-state
+  sgst       Decimal?   @db.Decimal(5, 2)  // IN only
+  igst       Decimal?   @db.Decimal(5, 2)  // IN only: inter-state
+  isDefault  Boolean    @default(false) @map("is_default")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   products Product[]
 
-  @@index([businessId])
+  @@index([businessId, taxCountry])
   @@map("tax_rates")
 }
 
 enum ProductType { PRODUCT SERVICE }
-enum TaxType { GST IGST EXEMPT NIL }
+enum TaxType { GST IGST VAT ZERO EXEMPT NIL }
 ```
 
 ---
@@ -902,6 +1362,8 @@ enum TaxType { GST IGST EXEMPT NIL }
 ### Why one engine?
 
 Quotation → Sales Order → Invoice → Receipt is a workflow chain. Each document may reference its parent. A unified schema makes conversion trivial — you're updating a `document_type` and status, not migrating rows between tables. It also means all business logic (numbering, calculations, PDF templates, email sending) is written once.
+
+**Tax on documents:** Each invoice uses the business’s `taxCountry`. The editor loads that country’s tax UI (GST vs VAT), line columns, and calculator. `documents.taxCountry` is snapshotted on save so reports stay correct if the business ever changes country (discouraged in MVP).
 
 ### Document schema
 
@@ -932,10 +1394,16 @@ model Document {
   paidAmount       Decimal   @default(0) @map("paid_amount") @db.Decimal(14, 2)
   balanceAmount    Decimal   @map("balance_amount") @db.Decimal(14, 2)
 
-  // GST metadata
+  // Tax country snapshot (from business at issue time — drives which calculator ran)
+  taxCountry       TaxCountry @default(IN) @map("tax_country")
+
+  // India GST metadata (null / unused when taxCountry = AE)
   placeOfSupply    String?   @map("place_of_supply")  // state code
   isIgst           Boolean   @default(false) @map("is_igst")
   reverseCharge    Boolean   @default(false) @map("reverse_charge")
+
+  // Normalised tax breakdown (all countries) — VAT lines for AE, GST summary for IN
+  taxBreakdown     Json?     @map("tax_breakdown")
 
   // Snapshot: client address at time of document creation
   clientSnapshot   Json?     @map("client_snapshot")
@@ -1137,90 +1605,245 @@ enum PaymentMethod {
 
 ---
 
-## 11. Phase 5 — GST & Indian Tax Compliance
+## 11. Phase 5 — Country-Based Tax System (India & UAE)
 
-This is a first-class feature for the Indian market, not an afterthought.
+Tax is **not** hard-coded to GST. Each business selects a **tax country** at registration (or in Settings). That choice loads the correct tax engine, invoice columns, validation rules, and PDF labels for every document in that workspace.
 
-### GST calculation service
+### MVP countries
+
+| UI label | `TaxCountry` code | Tax system | Currency | Business ID field |
+|----------|-------------------|------------|----------|-------------------|
+| **India** | `IN` | GST — CGST / SGST / IGST | INR (₹) | GSTIN, PAN, state code |
+| **UAE (Dubai)** | `AE` | VAT — single tax per line | AED (د.إ) | TRN, emirate |
+
+> **Note:** Dubai is a city/emirate inside the UAE. Store country as **`AE`** (ISO code). Use `emirate: "Dubai"` on the business profile for display and future emirate-specific rules.
+
+### How country selection flows into the invoice
+
+```text
+Register / Settings
+    └── User picks: India  |  UAE (Dubai)
+            └── businesses.taxCountry = IN | AE
+            └── seedTaxProfileForBusiness() → default tax rates, column set, field defs
+
+Open Invoice Editor
+    └── Load business.taxCountry
+            └── getTaxProfile(taxCountry)  → columns, Configure Tax drawer, validators
+            └── getTaxProvider(taxCountry) → calculateDocument()
+
+Save Invoice
+    └── documents.taxCountry = business.taxCountry (snapshot)
+    └── taxBreakdown JSON + cgst/sgst/igst columns (IN) or vat in breakdown (AE)
+```
+
+**Rule:** Never let the client send `taxCountry` without verifying it matches `business.taxCountry` (MVP: business country is fixed after setup; changing country later is a separate migration flow).
+
+### Tax provider pattern (Strategy)
+
+```text
+packages/tax/
+├── index.ts                 # getTaxProvider(country), getTaxProfile(country)
+├── types.ts                 # TaxContext, TaxCalculationResult, TaxProfile
+├── providers/
+│   ├── india-gst.provider.ts
+│   └── uae-vat.provider.ts
+├── profiles/
+│   ├── india.profile.ts     # default columns, fields, seed rates
+│   └── uae.profile.ts
+└── seed/
+    └── seed-tax-profile.ts  # called on business create
+```
 
 ```ts
-// services/gst.service.ts
+// packages/tax/index.ts
 
-export interface GSTCalculationInput {
-  items: Array<{
-    rate: number;
-    quantity: number;
-    price: number;
-    discount: number;  // percentage
-    taxRate: number;   // e.g. 18
-  }>;
-  placeOfSupply: string;      // state code, e.g. "27" for Maharashtra
-  businessStateCode: string;  // seller state code
-  taxTreatment: TaxTreatment;
-  reverseCharge?: boolean;
+export interface TaxProvider {
+  country: TaxCountry;
+  calculate(input: TaxCalculationInput): TaxCalculationResult;
+  validateBusiness(business: Business): ValidationResult;
+  validateClient?(client: Client): ValidationResult;
 }
 
-export interface GSTCalculationOutput {
-  subtotal: Decimal;
-  discountAmount: Decimal;
-  taxableAmount: Decimal;
-  cgst: Decimal;
-  sgst: Decimal;
-  igst: Decimal;
-  cess: Decimal;
-  total: Decimal;
-  isIgst: boolean;
-  items: GSTLineItem[];
+export function getTaxProvider(taxCountry: TaxCountry): TaxProvider {
+  switch (taxCountry) {
+    case 'IN': return indiaGstProvider;
+    case 'AE': return uaeVatProvider;
+    default:   throw new Error(`Unsupported tax country: ${taxCountry}`);
+  }
 }
 
-export function calculateGST(input: GSTCalculationInput): GSTCalculationOutput {
-  const isIgst = input.placeOfSupply !== input.businessStateCode
-    || input.taxTreatment === TaxTreatment.OVERSEAS;
-
-  const items = input.items.map((item) => {
-    const grossAmount = new Decimal(item.quantity).mul(item.price);
-    const discountAmt = grossAmount.mul(item.discount).div(100);
-    const taxable = grossAmount.sub(discountAmt);
-
-    const cgst = isIgst ? new Decimal(0) : taxable.mul(item.taxRate / 2).div(100);
-    const sgst = isIgst ? new Decimal(0) : taxable.mul(item.taxRate / 2).div(100);
-    const igst = isIgst ? taxable.mul(item.taxRate).div(100) : new Decimal(0);
-
-    return { ...item, taxable, cgst, sgst, igst, amount: taxable.add(cgst).add(sgst).add(igst) };
-  });
-
-  return {
-    subtotal:      items.reduce((s, i) => s.add(i.grossAmount), new Decimal(0)),
-    discountAmount:items.reduce((s, i) => s.add(i.discountAmt), new Decimal(0)),
-    taxableAmount: items.reduce((s, i) => s.add(i.taxable), new Decimal(0)),
-    cgst:          items.reduce((s, i) => s.add(i.cgst), new Decimal(0)),
-    sgst:          items.reduce((s, i) => s.add(i.sgst), new Decimal(0)),
-    igst:          items.reduce((s, i) => s.add(i.igst), new Decimal(0)),
-    cess:          new Decimal(0),  // implement cess logic if needed
-    total:         items.reduce((s, i) => s.add(i.amount), new Decimal(0)),
-    isIgst,
-    items,
-  };
+// services/tax.service.ts — single entry for app code
+export function calculateTax(taxCountry: TaxCountry, input: TaxCalculationInput) {
+  return getTaxProvider(taxCountry).calculate(input);
 }
 ```
 
-### Compliance features (implement incrementally)
+### India provider (`IN`) — GST
 
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| GST Invoice with CGST/SGST/IGST | **MVP** | Mandatory for registered businesses |
-| B2B vs B2C invoice format | **MVP** | Different fields required |
-| HSN/SAC codes on items | **MVP** | Mandatory above ₹50L turnover |
-| e-Invoice (IRN + QR code) | High | Required for turnover >₹5Cr |
-| e-Way Bill generation | High | Required for goods > ₹50,000 |
-| GSTR-1 export | Medium | Monthly return data |
-| TDS deduction tracking | Medium | Section 194C/194J |
-| Reverse charge mechanism | Medium | Specific categories |
-| Composition scheme | Low | Flat rate taxpayers |
+Same logic as before, isolated in `india-gst.provider.ts`:
+
+- **Line columns:** Item, HSN/SAC, GST %, Qty, Rate, Amount, **CGST**, **SGST**, **IGST**, Total
+- **Configure GST drawer:** place of supply, tax treatment, reverse charge
+- **Split:** intra-state → CGST + SGST; inter-state / overseas → IGST
+- **Persist:** `cgstAmount`, `sgstAmount`, `igstAmount` on document; `taxBreakdown.gst` in JSON
+
+```ts
+// packages/tax/providers/india-gst.provider.ts (excerpt)
+export const indiaGstProvider: TaxProvider = {
+  country: 'IN',
+  calculate(input) { /* CGST/SGST/IGST logic */ },
+  validateBusiness(b) {
+    if (b.taxTreatment === 'REGISTERED' && !b.gstin) return invalid('GSTIN required');
+    return valid();
+  },
+};
+```
+
+### UAE provider (`AE`) — VAT (Dubai / Emirates)
+
+- **Line columns:** Item, Description, Qty, Rate, Taxable amount, **VAT %**, **VAT amount**, Total  
+  (No CGST/SGST/IGST — hide those columns entirely for `AE`)
+- **Configure VAT drawer:** TRN, emirate, VAT treatment (standard / zero-rated / exempt)
+- **Typical rates:** 5% standard, 0% zero-rated, exempt (seed on business create)
+- **Persist:** `cgst/sgst/igst` = 0; store VAT in `taxBreakdown.vat` and line `values.vat_amount`
+
+```ts
+// packages/tax/providers/uae-vat.provider.ts (excerpt)
+export const uaeVatProvider: TaxProvider = {
+  country: 'AE',
+  calculate(input) {
+    // per line: vatAmount = taxable * vatRate / 100
+    // document: totalVat, totalAmount
+  },
+  validateBusiness(b) {
+    if (!b.trn) return invalid('TRN required for UAE VAT invoices');
+    return valid();
+  },
+};
+```
+
+### Tax profile (what the invoice UI loads)
+
+A **tax profile** is config — not user data — keyed by `taxCountry`:
+
+```ts
+// packages/tax/profiles/india.profile.ts
+export const indiaTaxProfile: TaxProfile = {
+  country: 'IN',
+  currency: 'INR',
+  configureTaxLabel: 'Configure GST',
+  defaultLineColumns: ['item', 'hsn', 'gst_rate', 'quantity', 'rate', 'amount', 'cgst', 'sgst', 'total'],
+  defaultTaxRates: [
+    { name: 'GST 18%', rate: 18, type: 'GST' },
+    { name: 'GST 12%', rate: 12, type: 'GST' },
+    { name: 'GST 5%', rate: 5, type: 'GST' },
+    { name: 'Exempt', rate: 0, type: 'EXEMPT' },
+  ],
+  businessFields: ['gstin', 'pan', 'stateCode'],
+  clientFields: ['gstin', 'stateCode', 'country'],
+};
+
+// packages/tax/profiles/uae.profile.ts
+export const uaeTaxProfile: TaxProfile = {
+  country: 'AE',
+  currency: 'AED',
+  configureTaxLabel: 'Configure VAT',
+  defaultLineColumns: ['item', 'quantity', 'rate', 'amount', 'vat_rate', 'vat_amount', 'total'],
+  defaultTaxRates: [
+    { name: 'VAT 5%', rate: 5, type: 'VAT' },
+    { name: 'Zero rated', rate: 0, type: 'ZERO' },
+    { name: 'Exempt', rate: 0, type: 'EXEMPT' },
+  ],
+  businessFields: ['trn', 'emirate'],
+  clientFields: ['trn', 'country'],
+};
+```
+
+On invoice mount:
+
+```ts
+const { taxCountry } = business;
+const profile = getTaxProfile(taxCountry);
+// Apply profile.defaultLineColumns to table; show profile.configureTaxLabel in toolbar
+```
+
+### `taxBreakdown` JSON (country-agnostic storage)
+
+```ts
+// India example
+{
+  "country": "IN",
+  "cgst": "900.00",
+  "sgst": "900.00",
+  "igst": "0.00",
+  "cess": "0.00"
+}
+
+// UAE example
+{
+  "country": "AE",
+  "vat": "50.00",
+  "vatRateSummary": [{ "rate": 5, "taxable": "1000.00", "vat": "50.00" }]
+}
+```
+
+Reports and PDF read `taxBreakdown` + legacy columns for India.
+
+### Registration & settings UI
+
+| Step | UI |
+|------|-----|
+| **Register** | Country selector: **India** \| **UAE (Dubai)** → sets `taxCountry`, currency, seeds profile |
+| **Settings → Business** | Show country-specific fields only (GSTIN vs TRN) |
+| **Settings → Taxes** | List `tax_rates` filtered by `business.taxCountry` |
+| **Invoice toolbar** | Button text from profile: "Configure GST" or "Configure VAT" |
+
+### Seeding on business create
+
+```ts
+// packages/tax/seed/seed-tax-profile.ts
+export async function seedTaxProfileForBusiness(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  taxCountry: TaxCountry
+) {
+  const profile = getTaxProfile(taxCountry);
+  await tx.taxRate.createMany({
+    data: profile.defaultTaxRates.map(r => ({ ...r, businessId, taxCountry })),
+  });
+  // Clone system DocumentFieldDefinitions + default line columns for IN or AE
+}
+```
+
+### Compliance features (by country)
+
+| Feature | India (`IN`) | UAE (`AE`) |
+|---------|:------------:|:----------:|
+| Multi-component tax on invoice | CGST/SGST/IGST **MVP** | VAT **MVP** |
+| Tax registration on business | GSTIN **MVP** | TRN **MVP** |
+| HSN / SAC on lines | **MVP** | Optional |
+| B2B vs B2C format | **MVP** | Simpler |
+| e-Invoice / IRN | High (later) | — |
+| e-Way Bill | High (later) | — |
+| GSTR-1 export | Medium | — |
+| FTA VAT return export | — | Medium (later) |
+| TDS / reverse charge | Medium | — |
+
+### Phase 5 definition of done
+
+- [ ] Register includes country selector (India / UAE Dubai); correct currency and seed
+- [ ] `getTaxProvider(IN)` and `getTaxProvider(AE)` with unit tests
+- [ ] Invoice editor loads columns + Configure Tax UI from `getTaxProfile(taxCountry)`
+- [ ] India invoice shows CGST/SGST/IGST; UAE invoice shows VAT only (no GST columns)
+- [ ] `documents.taxCountry` snapshotted; `taxBreakdown` populated per country
+- [ ] `tax_rates` CRUD scoped to `business.taxCountry`
+- [ ] Cannot create UAE tax rate on India business (server validation)
 
 ---
 
 ## 12. Phase 6 — PDF, Email & Notifications
+
+> **Full implementation plan:** [PDF-GENERATION.MD](./PDF-GENERATION.MD) — dynamic templates, field customization, layout/blocks, save & reuse, per document type (invoice, quotation, etc.).
 
 ### PDF generation
 
@@ -1297,7 +1920,7 @@ export async function scheduleOverdueReminders() {
 All dashboard queries must use `businessId` in every WHERE clause. Compute aggregates at query time for accuracy; cache with Redis (TTL: 5 minutes) for performance.
 
 ```ts
-// modules/reports/dashboard.service.ts
+// modules/dashboard/dashboard.service.ts
 
 export async function getDashboardMetrics(businessId: string, period: DateRange) {
   const [revenue, outstanding, topClients, recentDocs] = await Promise.all([
@@ -1410,7 +2033,8 @@ export async function getUploadPresignedUrl(params: {
 ### Server Actions (primary pattern)
 
 ```ts
-// actions/document.actions.ts
+// modules/sales-and-invoices/invoices/invoice.actions.ts
+// uses modules/shared/documents/document.service.ts
 'use server';
 
 export async function createInvoice(input: CreateInvoiceInput) {
@@ -1427,8 +2051,11 @@ export async function createInvoice(input: CreateInvoiceInput) {
     // 4. Generate document number (atomic)
     const documentNumber = await generateDocumentNumber(tx, session.activeBusinessId, 'INVOICE');
 
-    // 5. Calculate GST
-    const gst = calculateGST({ items: data.items, ...gstParams });
+    // 5. Calculate tax via country provider (IN = GST, AE = VAT)
+    const business = await tx.business.findUniqueOrThrow({
+      where: { id: session.activeBusinessId },
+    });
+    const tax = calculateTax(business.taxCountry, { items: data.items, ...taxParams });
 
     // 6. Create document
     const document = await tx.document.create({
@@ -1436,9 +2063,11 @@ export async function createInvoice(input: CreateInvoiceInput) {
         businessId: session.activeBusinessId,  // belt + suspenders
         documentNumber,
         documentType: 'INVOICE',
-        ...gst,
+        taxCountry: business.taxCountry,
+        ...tax.totals,
+        taxBreakdown: tax.breakdown,
         createdBy: session.user.id,
-        items: { createMany: { data: gst.items } },
+        items: { createMany: { data: tax.items } },
       },
     });
 
@@ -1450,7 +2079,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
         action: 'INVOICE_CREATED',
         entityType: 'Document',
         entityId: document.id,
-        newValues: { documentNumber, totalAmount: gst.total },
+        newValues: { documentNumber, totalAmount: tax.total },
       },
     });
 
@@ -1490,13 +2119,111 @@ export async function getInvoices(businessId: string) {
   return prisma.document.findMany({ where: { businessId } }); // attacker controls this
 }
 
-// ✅ CORRECT
-export async function getInvoices() {
+// ✅ CORRECT — keyset paginated list
+export async function listInvoices(input: ListInvoicesInput) {
   const session = await getSessionOrThrow();
-  return prisma.document.findMany({
-    where: { businessId: session.activeBusinessId },  // from verified session
+  await requirePermission(PERMISSIONS.INVOICE_VIEW);
+
+  const { cursor, limit, status } = listInvoicesSchema.parse(input);
+
+  return keysetPaginate({
+    model: prisma.document,
+    where: {
+      businessId: session.activeBusinessId,
+      documentType: 'INVOICE',
+      deletedAt: null,
+      ...(status ? { status } : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    cursor,
+    limit,
   });
 }
+```
+
+### Keyset pagination (implementation)
+
+**Single source of truth:** `packages/pagination` — see [§6 Shared pagination package](#shared-pagination-package-packagespagination).
+
+Implement `keysetPaginate`, `paginationInputSchema`, and `useKeysetInfiniteQuery` **once** in that package. Every module imports them; do not duplicate pagination code under `modules/*` or `lib/`.
+
+#### Core implementation (`packages/pagination/src/keyset-paginate.ts`)
+
+```ts
+import { decodeCursor, encodeCursor } from './cursor';
+import type { PaginatedResponse } from './types';
+
+export async function keysetPaginate<T extends { id: string; createdAt: Date }>(args: {
+  model: { findMany: (q: unknown) => Promise<T[]> };
+  where: Record<string, unknown>;
+  orderBy: Array<Record<string, 'asc' | 'desc'>>;
+  cursor?: string;
+  limit: number;
+  select?: Record<string, boolean>;
+}): Promise<PaginatedResponse<T>> {
+  const cursor = decodeCursor(args.cursor);
+  const { limit, model, where, orderBy, select } = args;
+
+  const rows = await model.findMany({
+    where: {
+      ...where,
+      ...(cursor && {
+        OR: [
+          { createdAt: { lt: new Date(cursor.createdAt) } },
+          { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
+        ],
+      }),
+    },
+    orderBy,
+    take: limit + 1,
+    ...(select && { select }),
+  });
+
+  const hasNextPage = rows.length > limit;
+  const items = hasNextPage ? rows.slice(0, limit) : rows;
+  const last = items.at(-1);
+
+  return {
+    items,
+    pageInfo: {
+      hasNextPage,
+      nextCursor:
+        hasNextPage && last
+          ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id })
+          : null,
+    },
+  };
+}
+```
+
+#### Checklist when adding a new list screen
+
+1. Add `listXSchema = paginationInputSchema.extend({ /* filters */ })`.
+2. Add `listX` Server Action → `keysetPaginate({ where: { businessId, ... }, select })`.
+3. Add `useXList` hook → `useKeysetInfiniteQuery({ queryFn: (c) => listX({ ...filters, cursor: c }) })`.
+4. Page in `app/(dashboard)/.../page.tsx` → `<KeysetDataTable query={useXList(filters)} />`.
+5. Prisma model: `@@index([businessId, createdAt, id])` (+ status index if filtered).
+
+Never return `totalCount` on list requests. Dashboard totals use cached aggregates.
+
+#### Sorting on other columns
+
+Pass `sortBy` + `sortDir` into `paginationInputSchema.extend()`; validate against `SORT_ALLOWLIST` in `packages/pagination/src/sort-presets.ts`. Cursor encodes `{ [sortField]: value, id }`. Add matching composite index per sort.
+
+#### What NOT to do
+
+```ts
+// ❌ OFFSET pagination on large tables
+await prisma.document.findMany({
+  skip: page * 20,
+  take: 20,
+});
+
+// ❌ Cursor without tie-breaker id (duplicate createdAt breaks pages)
+orderBy: { createdAt: 'desc' }
+
+// ❌ Client sends raw { createdAt, id } without tenant check on the query
+where: { id: { gt: cursor.id } }  // missing businessId
 ```
 
 ---
@@ -1589,11 +2316,12 @@ export const getDashboardKey = (businessId: string, period: string) =>
 
 ### Query performance rules
 
-1. All list queries must be paginated (cursor-based preferred for large datasets).
-2. Never use `findMany` without a `take` limit.
-3. Use `select` to fetch only required fields — never return full rows to the client.
-4. Compound indexes on `(business_id, status)` and `(business_id, created_at)` are mandatory.
+1. All list queries must use **`keysetPaginate` from `@repo/pagination`** ([§6](#shared-pagination-package-packagespagination)) — no `skip`/`OFFSET`; no copy-paste pagination per module.
+2. Never use `findMany` without a `take` limit (`limit + 1` pattern for `hasNextPage`).
+3. Use `select` to fetch only required fields — never return full rows or large JSON blobs to list views.
+4. Compound indexes must include tie-breaker `id`: `(business_id, created_at DESC, id DESC)` and `(business_id, status, created_at DESC, id DESC)`.
 5. Use `Promise.all` for independent queries. Never chain awaits for parallel data.
+6. Avoid `COUNT(*)` on list pages; use cached aggregates for dashboard totals.
 
 ---
 
@@ -1601,10 +2329,25 @@ export const getDashboardKey = (businessId: string, period: string) =>
 
 | Level | Tool | What to test |
 |-------|------|-------------|
-| Unit | Vitest | GST calculations, document numbering, permission checks |
-| Integration | Vitest + test DB | Server Actions with real Prisma against test PostgreSQL |
+| Unit | Vitest | Tax providers (IN GST, AE VAT), document numbering, permission checks |
+| Integration | Vitest + test DB | Server Actions with real Prisma against test PostgreSQL; keyset page boundaries |
 | E2E | Playwright | Full user flows: register → create invoice → send → pay |
 | Security | Custom test suite | IDOR: access another tenant's resources via known UUIDs |
+
+### Keyset pagination tests (`packages/pagination`)
+
+```ts
+// packages/pagination/src/__tests__/keyset-paginate.test.ts
+describe('keysetPaginate', () => {
+  it('returns first page without cursor', async () => { /* ... */ });
+  it('returns next page using nextCursor', async () => { /* ... */ });
+  it('hasNextPage false on last page', async () => { /* ... */ });
+  it('does not duplicate rows when many share same createdAt', async () => {
+    // create 3 docs with identical createdAt — ids must still page correctly
+  });
+  it('never returns rows from another businessId', async () => { /* tenant isolation */ });
+});
+```
 
 ### Critical security tests (mandatory before Phase 2)
 
@@ -1678,8 +2421,9 @@ Review before every phase transition.
 ### Compliance
 - [ ] Audit log covers every financial mutation
 - [ ] Soft delete on all operational tables (no hard delete of financial records)
-- [ ] GSTIN validation regex applied at input
-- [ ] PAN validation regex applied at input
+- [ ] India: GSTIN and PAN validation regex applied at input
+- [ ] UAE: TRN format validated (15 digits) when `taxCountry = AE`
+- [ ] Tax rates cannot be created for a country other than `business.taxCountry`
 
 ---
 
@@ -1687,30 +2431,35 @@ Review before every phase transition.
 
 | Sprint | Duration | Focus | Exit Criteria |
 |--------|----------|-------|---------------|
-| **1** | 2 weeks | Auth + Tenant + RBAC + Middleware + Audit stub | All Phase 1 DoD checked; IDOR tests pass |
-| **2** | 1.5 weeks | Clients + Contacts + Products + Tax rates | CRUD with tenant isolation; validation complete |
-| **3** | 2 weeks | Document engine + Quotation flow | Create → send → approve; document numbering; PDF stub |
-| **4** | 2 weeks | Invoice + GST calculations | CGST/SGST/IGST correct; B2B/B2C formats; send via email |
+| **1** | 2 weeks | Auth + Tenant + RBAC + `@repo/pagination` package + Audit stub | Shared `keysetPaginate` + tests; IDOR tests pass |
+| **2** | 1.5 weeks | Clients + Products + Tax rates (per country) | CRUD; seed IN/AE rates; country-specific validation |
+| **3** | 2 weeks | Document engine + country tax providers | `packages/tax` IN + AE; register country selector |
+| **4** | 2 weeks | Invoice editor + tax UI | India: CGST/SGST/IGST; UAE: VAT columns; Configure GST/VAT drawer |
 | **5** | 1.5 weeks | Payments + Receipts | One payment → multiple invoice allocations; balance tracking |
 | **6** | 1.5 weeks | Sales Order + Delivery Challan + Credit Note | Parent→child chain; status transitions |
 | **7** | 1.5 weeks | PDF templates + Email queue | 2+ templates; async generation; delivery tracking |
-| **8** | 1.5 weeks | Dashboard + Reports + Notifications | KPI metrics; GSTR-1 export; overdue reminders |
-| **9** | 1 week | e-Invoice (IRN) + e-Way Bill | Government API integration; QR code on PDF |
+| **8** | 1.5 weeks | Dashboard + Reports + Notifications | KPI metrics; country-aware tax reports; overdue reminders |
+| **9** | 1 week | India: e-Invoice + e-Way Bill (optional) | IRN/QR for IN only; skip for AE in MVP |
 | **10** | 1 week | Performance + Security audit + Polish | Load test; penetration test; UX review |
 
 ---
 
 ## 21. Future Scope (Post-MVP)
 
-All future features reuse the same `business_id` isolation rules. No exceptions.
+All future features reuse the same `business_id` isolation rules. No exceptions. Each row maps to a **reserved domain folder** (see [§5 Repository Layout](#5-repository-layout)).
 
-| Feature | Notes |
-|---------|-------|
-| **Accounts (COA / Journal / GL)** | Chart of accounts; double-entry ledger; trial balance; P&L; balance sheet |
-| **Inventory management** | Stock tracking; FIFO/LIFO costing; low stock alerts |
-| **Purchase management** | Purchase orders; bills; vendor management |
-| **Recurring invoices** | BullMQ scheduler; flexible recurrence rules |
-| **CRM** | Lead pipeline; follow-ups; activity log |
+| Feature | Folder / route | Notes |
+|---------|----------------|-------|
+| **Accounts (COA / Journal / GL)** | `modules/accounting/`, `/accounting` | Sidebar: Accounting (New) |
+| **Full inventory** | `modules/products-and-inventory/stock/` | Sidebar: Products & Inventory |
+| **Purchase management** | `modules/purchases-and-expenses/*` | Vendor leads, POs, debit notes, payout receipts |
+| **Recurring invoices** | `modules/shared/documents/` + scheduler | BullMQ; linked from invoices |
+| **CRM & Leads** | `modules/sales-crm-and-leads/` | Sidebar: Sales CRM & Leads |
+| **GST Reports** | `modules/gst-reports/` | Sidebar: GST Reports (IN only) |
+| **Banking & Payments** | `modules/banking-and-payments/` | Sidebar item |
+| **Payroll & HRMS** | `modules/payroll-and-hrms/` | Sidebar item |
+| **Workflows** | `modules/workflows-and-automations/` | Sidebar item |
+| **Manage Team** | `modules/manage-team/` | Sidebar item |
 | **Multi-currency** | Exchange rates; realised/unrealised gains |
 | **WhatsApp delivery** | Document sharing via WhatsApp Business API |
 | **Mobile app** | React Native; reuse validation + types packages |
@@ -1721,6 +2470,6 @@ All future features reuse the same `business_id` isolation rules. No exceptions.
 
 ---
 
-> **Last updated:** Sprint 0 — Architecture baseline  
+> **Last updated:** Shared `@repo/pagination` package for all list endpoints  
 > **Owner:** Engineering Lead  
 > **Review cadence:** After each sprint before the next begins
