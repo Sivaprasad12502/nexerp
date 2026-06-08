@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Bell, CircleHelp, Gift, LayoutGrid, Menu, Search } from "lucide-react";
+import { UserMenu } from "./user-menu";
 
 export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   return (
@@ -51,19 +52,7 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
           <CircleHelp className="size-5" />
         </HeaderIcon>
 
-        <button
-          type="button"
-          className="ml-1 flex size-8 items-center justify-center rounded-full bg-white/20 text-sm font-semibold"
-        >
-          S
-        </button>
-
-        {/* <button
-          type="button"
-          className="ml-2 rounded-md bg-[#ff8a3d] px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#fb7a26]"
-        >
-          Upgrade
-        </button> */}
+        <UserMenu />
       </div>
     </header>
   );
