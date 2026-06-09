@@ -108,11 +108,11 @@ const Register = () => {
                 {...register("country")}
                 className="h-11 w-full appearance-none rounded-md border border-zinc-300 bg-white pl-3.5 pr-9 text-sm text-zinc-900 outline-none transition-colors focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/20"
               >
-                <option>India</option>
+                {/* <option>India</option>
                 <option>United States</option>
-                <option>United Kingdom</option>
+                <option>United Kingdom</option> */}
                 <option>United Arab Emirates</option>
-                <option>Canada</option>
+                {/* <option>Canada</option> */}
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
             </div>
@@ -150,9 +150,9 @@ const Register = () => {
               }`}
             >
               <span className="flex items-center gap-1 border-r border-zinc-300 px-2.5 text-sm text-zinc-700">
-                <span className="text-base leading-none">🇮🇳</span>
+                <span className="text-base leading-none">🇦🇪</span>
                 <ChevronDown className="size-3 text-zinc-400" />
-                <span>+91</span>
+                <span>+971</span>
               </span>
               <input
                 id="phone"

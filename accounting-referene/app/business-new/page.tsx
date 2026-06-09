@@ -48,8 +48,8 @@ const OnBoardingBusiness = () => {
   const form = useForm<BusinessInput>({
     resolver: zodResolver(businessSchema),
     defaultValues: {
-      country: "India",
-      currency: "Indian Rupee(INR, ₹)",
+      country: "United Arab Emirates (UAE)",
+      currency: "United Arab Emirates Dirham (AED , AED)",
       hasGst: true,
       usedFor: [],
       teamSize: "",
@@ -270,7 +270,7 @@ function BasicDetails({
           <Hint>Contact phone number associated with your business</Hint>
           <div className={`flex h-12 items-center rounded-lg border bg-white focus-within:border-[#6d3bd6] focus-within:ring-2 focus-within:ring-[#6d3bd6]/20 ${errors.phone ? "border-red-400" : "border-zinc-300"}`}>
             <span className="flex items-center gap-1 border-r border-zinc-300 px-3 text-sm text-zinc-700">
-              <span className="text-base leading-none">🇮🇳</span>
+              <span className="text-base leading-none">🇦🇪</span>
               <ChevronDown className="size-3.5 text-zinc-400" />
             </span>
             <input type="tel" {...register("phone")} className="h-full w-full rounded-r-lg bg-transparent px-3 text-sm text-zinc-900 outline-none" />
@@ -284,11 +284,11 @@ function BasicDetails({
             <Label num="5" required>Country</Label>
             <SelectBox error={!!errors.country}>
               <select {...register("country")} className={`${inputCls(!!errors.country)} cursor-pointer appearance-none pr-10`}>
-                <option>India</option>
+                {/* <option>India</option>
                 <option>United States</option>
-                <option>United Kingdom</option>
+                <option>United Kingdom</option> */}
                 <option>United Arab Emirates</option>
-                <option>Canada</option>
+                {/* <option>Canada</option> */}
               </select>
             </SelectBox>
           </div>
@@ -310,9 +310,10 @@ function BasicDetails({
         <div>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <Label num="7" required>Have GST Number?</Label>
+              <Label num="7" required>Are you a VAT registered business?</Label>
               <Hint>
-                Add your <span className="font-medium text-[#6d3bd6]">GSTIN</span> to unlock smart AI and GST workflows.
+               Add your TRN number to unlock eInvoicing & VAT reports.
+
               </Hint>
             </div>
             <Toggle on={hasGst} onChange={() => setValue("hasGst", !hasGst)} />
