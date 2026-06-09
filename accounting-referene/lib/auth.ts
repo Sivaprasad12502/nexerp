@@ -70,11 +70,20 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
       }
       if (token.id) {
-        const biz = await prisma.business.findUnique({
-          where: { userId: token.id as string },
-          select: { id: true },
-        });
-        token.hasBusiness = !!biz;
+        // A user "has a business" if they own one OR were invited into one
+        // (i.e. have a Membership). Invited members must not be forced through
+        // the /business-new onboarding flow (see proxy.ts).
+        const [biz, membership] = await Promise.all([
+          prisma.business.findUnique({
+            where: { userId: token.id as string },
+            select: { id: true },
+          }),
+          prisma.membership.findFirst({
+            where: { userId: token.id as string },
+            select: { id: true },
+          }),
+        ]);
+        token.hasBusiness = !!biz || !!membership;
       }
       return token;
     },

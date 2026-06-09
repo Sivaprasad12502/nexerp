@@ -20,6 +20,7 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   business      Business?
+  memberships   Membership[]
 }
 
 model Business {
@@ -39,4 +40,70 @@ model Business {
   category    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  roles       Role[]
+  memberships Membership[]
+  invitations Invitation[]
+}
+
+/// A named set of module/action permissions within a business.
+/// The business owner is bootstrapped with an `isSystem` "Super Admin" role
+/// that always implies full access (enforced in code, see lib/rbac.ts).
+model Role {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  /// { [moduleKey]: { view, create, edit, delete, approve: boolean } }
+  permissions Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships Membership[]
+  invitations Invitation[]
+
+  @@unique([businessId, name])
+}
+
+/// Links a User to a Business. Every user with access to a business (including
+/// the owner) has exactly one Membership row for that business.
+model Membership {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId      String?
+  role        Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  isOwner     Boolean  @default(false)
+  /// Optional per-user override. When null, effective permissions come from the role.
+  permissions Json?
+  status      String   @default("active") // active | inactive
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([businessId, userId])
+}
+
+/// A pending email invitation to join a business with a role / permission set.
+model Invitation {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  email       String
+  name        String?
+  roleId      String?
+  role        Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  /// Optional per-user override applied to the membership on acceptance.
+  permissions Json?
+  token       String   @unique
+  status      String   @default("pending") // pending | accepted | revoked
+  invitedById String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([businessId, email])
 }

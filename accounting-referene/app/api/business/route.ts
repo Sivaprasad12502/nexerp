@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { businessSchema } from "@/lib/validations/business";
+import { ensureOwnerSetup } from "@/lib/rbac";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -44,6 +45,9 @@ export async function POST(req: NextRequest) {
         usedFor: usedFor ?? [], category,
       },
     });
+
+    // Bootstrap the owner's "Super Admin" role + owner membership (idempotent).
+    await ensureOwnerSetup(session.user.id);
 
     return NextResponse.json({ success: true, businessId: business.id }, { status: 201 });
   } catch (err) {
