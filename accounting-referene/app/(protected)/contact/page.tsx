@@ -55,6 +55,15 @@ type Contact = {
   contactCode: string | null;
   image: string | null;
   createdAt: string;
+  linkedClients?: {
+    isPrimary: boolean;
+    client: {
+      id: string;
+      businessName: string;
+      email: string | null;
+      logo: string | null;
+    };
+  }[];
 };
 
 type TabStatus = "ACTIVE" | "INACTIVE" | "DELETED";

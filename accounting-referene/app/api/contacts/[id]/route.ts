@@ -11,6 +11,21 @@ const patchSchema = contactCreateSchema.partial().extend({
   status: z.enum(["ACTIVE", "INACTIVE", "DELETED"]).optional(),
 });
 
+const linkedClientsInclude = {
+  linkedClients: {
+    include: {
+      client: {
+        select: {
+          id: true,
+          businessName: true,
+          email: true,
+          logo: true,
+        },
+      },
+    },
+  },
+};
+
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const ctx = await getRbacContext();
   if (!ctx)
@@ -32,6 +47,47 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
 
   const data = result.data;
+  const linkedClients: { clientId: string; isPrimary?: boolean }[] | undefined =
+    Array.isArray(body?.linkedClients)
+      ? (body.linkedClients as unknown[])
+          .map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const value = item as { clientId?: unknown; isPrimary?: unknown };
+            if (typeof value.clientId !== "string" || !value.clientId) return null;
+            return {
+              clientId: value.clientId,
+              isPrimary: value.isPrimary === true,
+            };
+          })
+          .filter((item): item is { clientId: string; isPrimary: boolean } => item !== null)
+      : Array.isArray(body?.linkedClientIds)
+        ? (body.linkedClientIds as unknown[])
+            .filter((clientId): clientId is string => typeof clientId === "string" && clientId.length > 0)
+            .map((clientId) => ({ clientId, isPrimary: false }))
+        : undefined;
+
+  const uniqueLinkedClients =
+    linkedClients === undefined
+      ? undefined
+      : Array.from(
+          new Map(linkedClients.map((link) => [link.clientId, link])).values(),
+        );
+
+  if (uniqueLinkedClients !== undefined && uniqueLinkedClients.length > 0) {
+    const allowedClientCount = await prisma.client.count({
+      where: {
+        businessId: ctx.businessId,
+        id: { in: uniqueLinkedClients.map((link) => link.clientId) },
+      },
+    });
+
+    if (allowedClientCount !== uniqueLinkedClients.length) {
+      return NextResponse.json(
+        { error: "One or more clients were not found" },
+        { status: 400 },
+      );
+    }
+  }
 
   const updated = await prisma.contact.update({
     where: { id },
@@ -84,7 +140,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }),
       ...(data.zipCode !== undefined && { zipCode: data.zipCode || null }),
       ...(data.street !== undefined && { street: data.street || null }),
+      ...(uniqueLinkedClients !== undefined && {
+        linkedClients: {
+          deleteMany: {},
+          create: uniqueLinkedClients.map((link) => ({
+            clientId: link.clientId,
+            isPrimary: link.isPrimary,
+          })),
+        },
+      }),
     },
+    include: linkedClientsInclude,
   });
 
   return NextResponse.json({ contact: updated });

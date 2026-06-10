@@ -15,6 +15,20 @@ export async function GET(req: NextRequest) {
   const contacts = await prisma.contact.findMany({
     where: { businessId: ctx.businessId, status: resolvedStatus as "ACTIVE" | "INACTIVE" | "DELETED" },
     orderBy: { createdAt: "desc" },
+    include: {
+      linkedClients: {
+        include: {
+          client: {
+            select: {
+              id: true,
+              businessName: true,
+              email: true,
+              logo: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   return NextResponse.json({ contacts });

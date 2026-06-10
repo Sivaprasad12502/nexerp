@@ -30,6 +30,15 @@ type Contact = {
   postalCode?: string | null;
   zipCode?: string | null;
   street?: string | null;
+  linkedClients?: {
+    isPrimary: boolean;
+    client: {
+      id: string;
+      businessName: string;
+      email: string | null;
+      logo: string | null;
+    };
+  }[];
 };
 
 function copyToClipboard(text: string) {
@@ -73,7 +82,14 @@ export function ViewContactDrawer({
 
   // Reset tab when a new contact opens
   useEffect(() => {
-    if (open) setTab("details");
+    if (!open) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setTab("details");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [open, contact?.id]);
 
   if (!contact) return null;
@@ -237,9 +253,60 @@ export function ViewContactDrawer({
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-zinc-400">
-              <p className="text-sm">No clients linked yet.</p>
-            </div>
+            <>
+              {(contact.linkedClients ?? []).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-zinc-400">
+                  <p className="text-sm">No clients linked yet.</p>
+                </div>
+              ) : (
+                <ul className="space-y-2 py-4">
+                  {(contact.linkedClients ?? []).map(({ client, isPrimary }) => {
+                    const initials = client.businessName
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <li
+                        key={client.id}
+                        className="flex items-center gap-3 rounded-lg border border-zinc-100 px-4 py-3"
+                      >
+                        {client.logo ? (
+                          <img
+                            src={client.logo}
+                            alt={client.businessName}
+                            className="size-10 shrink-0 rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-sm font-medium text-white">
+                            {initials}
+                          </span>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-zinc-900">
+                            {client.businessName}
+                          </p>
+                          {client.email && (
+                            <p className="truncate text-xs text-zinc-500">
+                              {client.email}
+                            </p>
+                          )}
+                        </div>
+
+                        {isPrimary && (
+                          <span className="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700">
+                            Primary
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
           )}
         </div>
       </div>
