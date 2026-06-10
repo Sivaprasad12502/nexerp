@@ -175,6 +175,21 @@ function ContactsTable({ onEdit }: { onEdit: (c: Contact) => void }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteContact = useMutation({
+    mutationFn: async (id: string)=>{
+      const res=await fetch(`/api/contacts/${id}`,{
+        method: "DELETE",
+      })
+      if(!res.ok) throw new Error("Failed to delete contact");
+      return res.json()
+    },
+    onSuccess:()=>{
+      toast.success("Contact deleted successfully");
+      qc.invalidateQueries({ queryKey: ["contacts"]});
+    },
+    onError:(e:Error)=> toast.error(e.message)
+  })
+
   const { data, isLoading } = useQuery({
     queryKey: ["contacts", activeTab],
     queryFn: async () => {
@@ -373,6 +388,11 @@ function ContactsTable({ onEdit }: { onEdit: (c: Contact) => void }) {
                             onEdit(c);
                             setOpenMoreId(null);
                           }}
+                          onDelete={()=>{
+                            if(confirm("Are you sure you want to delete this contact?")){
+                              deleteContact.mutate(c.id);
+                            }
+                          }}
                           onLinkClient={() => {
                             setLinkContact(c);
                             setSidebarOpen(true);
@@ -431,6 +451,7 @@ function MoreMenu({
   activeTab,
   onView,
   onEdit,
+  onDelete,
   onLinkClient,
   onToggleStatus,
   statusPending,
@@ -439,6 +460,7 @@ function MoreMenu({
   activeTab: TabStatus;
   onView: () => void;
   onEdit: () => void;
+  onDelete: () => void;
   onLinkClient: () => void;
   onToggleStatus: () => void;
   statusPending: boolean;
@@ -455,18 +477,20 @@ function MoreMenu({
   const items = [
     { label: "View", icon: Eye, onClick: onView },
     { label: "Link Client", icon: Link2, onClick: onLinkClient },
-    { label: "Edit", icon: Pencil, onClick: onEdit },
+    { label: "Edit", icon: Pencil, onClick: onEdit ,hidden: activeTab === "DELETED"},
     {
       label: statusLabel,
       icon: Ban,
       onClick: onToggleStatus,
       disabled: statusPending,
+      hidden: activeTab === "DELETED"
     },
     {
       label: "Delete",
       icon: Trash2,
-      onClick: () => console.log("delete"),
+      onClick: onDelete,
       danger: true,
+      hidden: activeTab === "DELETED",
     },
   ];
 
@@ -483,7 +507,7 @@ function MoreMenu({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-52">
-        {items.map(
+        {items.filter((item)=>!item.hidden).map(
           ({ label, icon: Icon, onClick, disabled, danger }) => (
             <DropdownMenuItem
               key={label}
@@ -728,8 +752,8 @@ function CreateContactForm({
             <Label>Phone</Label>
             <div className="mt-2 flex">
               <div className="flex h-10 items-center gap-2 rounded-l-md border border-r-0 border-zinc-200 px-3 text-sm text-zinc-700">
-                <span>🇮🇳</span>
-                <span>+91</span>
+                <span>🇦🇪</span>
+                <span>+971</span>
               </div>
               <input
                 {...register("phone")}

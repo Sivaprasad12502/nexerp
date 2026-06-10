@@ -45,6 +45,7 @@ model Business {
   memberships Membership[]
   invitations Invitation[]
   contacts    Contact[]
+  clients     Client[]
 }
 
 enum ContactStatus {
@@ -101,7 +102,87 @@ model Contact {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
+  linkedClients ClientContact[]
+
   @@index([businessId, status])
+}
+
+enum ClientType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum ClientStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Client {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // Basic info
+  logo         String?
+  businessName String
+  industry     String?
+  country      String?
+  city         String?
+  clientType   ClientType @default(COMPANY)
+
+  // Tax
+  trn          String?
+  vatNumber    String?
+  taxTreatment String?
+
+  // Billing address
+  addressCountry String?
+  state          String?
+  district       String?
+  addressCity    String?
+  buildingNumber String?
+  postalCode     String?
+  streetAddress  String?
+
+  // Shipping
+  shippingName       String?
+  shippingCountry    String?
+  shippingState      String?
+  shippingCity       String?
+  shippingPostalCode String?
+  shippingStreet     String?
+
+  // Additional details
+  businessAlias      String?
+  uniqueKey          String?  @unique @default(cuid())
+  email              String?
+  showEmailInInvoice Boolean  @default(false)
+  phoneCode          String?  @default("+971")
+  phone              String?
+  showPhoneInInvoice Boolean  @default(false)
+  defaultDueDays     Int?
+  paymentAccount     String?
+
+  status    ClientStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  linkedContacts ClientContact[]
+
+  @@index([businessId, status])
+}
+
+model ClientContact {
+  id        String  @id @default(cuid())
+  clientId  String
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, contactId])
 }
 
 /// A named set of module/action permissions within a business.
