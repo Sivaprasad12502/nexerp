@@ -20,6 +20,7 @@ import {
   Workflow,
   type LucideIcon,
   Contact,
+  LayoutDashboard,
 } from "lucide-react";
 
 type NavChild = {
@@ -37,6 +38,11 @@ type NavItem = {
 
 const items: NavItem[] = [
   {
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    href: "/dashboard",
+  },
+  {
     label: "Contact",
     icon: Contact,
     href: "/contact",
@@ -46,8 +52,8 @@ const items: NavItem[] = [
     label: "Sales & Invoices",
     icon: FileText,
     children: [
-      { label: "Clients & Prospects", href: "/sales/clients" },
-      { label: "Quotation & Estimates", href: "/sales/quotations" },
+      { label: "Clients & Prospects", href: "/sales-and-invoices/clients-prospects" },
+      { label: "Quotation & Estimates", href: "/sales-and-invoices/quotation-estimates" },
       { label: "Proforma Invoices", href: "/sales/proforma-invoices" },
       { label: "Invoices", href: "/sales/invoices" },
       { label: "Payment Receipts", href: "/sales/payment-receipts" },

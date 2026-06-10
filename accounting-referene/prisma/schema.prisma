@@ -44,6 +44,64 @@ model Business {
   roles       Role[]
   memberships Membership[]
   invitations Invitation[]
+  contacts    Contact[]
+}
+
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+/// An individual person associated with a business. A contact can later be
+/// linked to one or more clients/vendors (linking is not yet persisted).
+model Contact {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // Basic information
+  prefix      String?
+  firstName   String
+  lastName    String?
+  email       String?
+  phone       String?
+  country     String
+  contactCode String? // user-facing "Contact ID"
+
+  // Secondary contact details
+  secondaryEmail String?
+  secondaryPhone String?
+
+  // Display picture (S3 URL)
+  image String?
+
+  // Tax & identification
+  panNumber      String?
+  aadhaarNumber  String?
+  passportNumber String?
+
+  // Social profiles
+  linkedinUrl  String?
+  xUrl         String?
+  facebookUrl  String?
+  githubUrl    String?
+
+  // Address
+  addressCountry String?
+  state          String?
+  district       String?
+  city           String?
+  building       String?
+  postalCode     String?
+  zipCode        String?
+  street         String?
+
+  status    ContactStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([businessId, status])
 }
 
 /// A named set of module/action permissions within a business.
