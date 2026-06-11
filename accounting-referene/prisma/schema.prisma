@@ -38,6 +38,8 @@ model Business {
   gstNumber   String?
   usedFor     String[]
   category    String?
+  manageInventory          Boolean @default(false)
+  enableMultipleWarehouses Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -46,6 +48,8 @@ model Business {
   invitations Invitation[]
   contacts    Contact[]
   clients     Client[]
+  warehouses  Warehouse[]
+  products    Product[]
 }
 
 enum ContactStatus {
@@ -245,4 +249,139 @@ model Invitation {
   updatedAt   DateTime @updatedAt
 
   @@unique([businessId, email])
+}
+
+// ─── Inventory ────────────────────────────────────────────────────────────────
+
+enum ItemType {
+  PRODUCT
+  SERVICE
+}
+
+enum TrackingMethod {
+  NONE
+  BATCHWISE
+  SERIAL
+  BATCH_SERIAL
+}
+
+enum ProductStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum StockAdjustmentType {
+  INCOMING
+  OUTGOING
+}
+
+model Warehouse {
+  id              String   @id @default(cuid())
+  businessId      String
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name            String
+  warehouseCode   String?
+  location        String?
+  contactInfo     String?
+  notes           String?
+  isDefault       Boolean  @default(false)
+  warehouseStatus String   @default("ACTIVE") // ACTIVE | INACTIVE
+  vatNumber       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stockLevels  WarehouseStock[]
+  adjustments  StockAdjustment[]
+
+  @@index([businessId])
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  itemType         ItemType       @default(PRODUCT)
+  name             String
+  sku              String?
+  category         String?
+  unit             String?
+  hsnSac           String?
+  canBeSold        Boolean        @default(true)
+  manageStock      Boolean        @default(true)
+  image            String?
+  originalImage    String?
+  description      String?
+  tags             String[]
+
+  // Accounting
+  purchaseLedger   String?
+  salesLedger      String?
+  inventoryLedger  String?
+
+  // Pricing & Taxation
+  currency             String?
+  buyingPrice          Float?
+  sellingPrice         Float?
+  landedCost           Float?
+  taxRate              Float?
+  priceInclusiveTax    Boolean @default(false)
+
+  // Dimensions
+  length       Float?
+  breadth      Float?
+  height       Float?
+  grossWeight  Float?
+  netWeight    Float?
+
+  // Stock management
+  trackingMethod TrackingMethod @default(NONE)
+  reorderPoint   Int?
+  overstockPoint Int?
+
+  status    ProductStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  stockLevels WarehouseStock[]
+  adjustments StockAdjustment[]
+
+  @@index([businessId, status])
+}
+
+model WarehouseStock {
+  id          String    @id @default(cuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  quantity  Float @default(0)
+  committed Float @default(0)
+
+  @@unique([productId, warehouseId])
+}
+
+model StockAdjustment {
+  id          String              @id @default(cuid())
+  businessId  String
+  productId   String
+  product     Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  type          StockAdjustmentType
+  quantity      Float
+  rate          Float?
+  adjustedValue Float?
+  vendor        String?
+  reason        String
+  notes         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId])
+  @@index([productId])
 }

@@ -83,7 +83,10 @@ const items: NavItem[] = [
   {
     label: "Products & Inventory",
     icon: Package,
-    href: "/products-and-inventory",
+    children: [
+      { label: "All Items", href: "/products-inventory/all-items" },
+      { label: "Warehouse", href: "/products-inventory/warehouse" },
+    ],
   },
   {
     label: "Reports",

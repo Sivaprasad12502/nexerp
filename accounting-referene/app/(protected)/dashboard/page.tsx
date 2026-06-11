@@ -219,13 +219,7 @@ export default async function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-            <div className="flex h-12 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 text-sm text-zinc-600 shadow-sm">
-              <UsersRound className="size-4 text-[#7438dc]" />
-              <span>
-                <strong className="font-semibold text-zinc-900">{activeUsers}</strong>{" "}
-                active {activeUsers === 1 ? "user" : "users"}
-              </span>
-            </div>
+           
 
             {pendingInvites > 0 && (
               <div className="flex h-12 items-center rounded-md border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800">
