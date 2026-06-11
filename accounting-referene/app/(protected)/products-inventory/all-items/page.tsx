@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -9,27 +9,19 @@ import {
   Package,
   Eye,
   Pencil,
-  Copy,
-  TrendingUp,
-  Trash2,
   AlertTriangle,
   Search,
   Download,
   ChevronDown,
   X,
   ChevronRight,
-  MoreHorizontal,
+  MessageCircle,
+  ArrowRight,
 } from "lucide-react";
 import { useInventoryStatus } from "@/lib/hooks/use-inventory-status";
 import { ItemForm, type ItemFormData } from "@/components/inventory/item-form";
 import { ViewItemDrawer } from "@/components/inventory/view-item-drawer";
 import { AdjustStockModal } from "@/components/inventory/adjust-stock-modal";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { ProductCreateInput } from "@/lib/validations/product";
 
 type StockLevel = {
@@ -88,11 +80,61 @@ function stockBadge(product: ProductRow) {
   return { label: "In Stock", cls: "bg-green-50 text-green-700 ring-1 ring-green-200" };
 }
 
+function formatItemType(itemType: "PRODUCT" | "SERVICE") {
+  return itemType === "PRODUCT" ? "Product" : "Service";
+}
+
+function formatPrice(currency: string | null | undefined, amount: number | null | undefined) {
+  if (amount == null) return "—";
+  const cur = currency ?? "AED";
+  const value = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  return `${cur} ${value}`;
+}
+
+function TableFilterIcon() {
+  return (
+    <svg className="size-3 shrink-0 text-zinc-400" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M1.5 2.5h9M3 6h6M4.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TableSortIcon() {
+  return (
+    <svg className="size-3 shrink-0 text-zinc-400" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path
+        d="M6 1.5v9M3.5 4.5L6 2l2.5 2.5M3.5 7.5L6 10l2.5-2.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ShowHideColumnsButton() {
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-1.5 rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+    >
+      <svg className="size-3.5" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+      Show/Hide Columns
+    </button>
+  );
+}
+
 export default function AllItemsPage() {
   const qc = useQueryClient();
   const { manageInventory, warehouseCount, isLoading: statusLoading } = useInventoryStatus();
 
-  const [activeTab, setActiveTab] = useState<TabStatus>("ACTIVE");
+  const activeTab: TabStatus = "ACTIVE";
   const [isCreating, setIsCreating] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [viewingProductId, setViewingProductId] = useState<string | null>(null);
@@ -145,19 +187,6 @@ export default function AllItemsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? "Failed to delete");
-    },
-    onSuccess: () => {
-      toast.success("Item archived");
-      qc.invalidateQueries({ queryKey: ["products"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const products = productsData?.products ?? [];
   const warehouses = warehousesData?.warehouses ?? [];
 
@@ -183,12 +212,6 @@ export default function AllItemsPage() {
 
   async function handleSave(data: ProductCreateInput) {
     await saveMutation.mutateAsync({ data, id: editingProduct?.id });
-  }
-
-  function startDuplicate(p: ProductRow) {
-    const { id: _id, status: _status, stockLevels: _sl, ...rest } = p;
-    setEditingProduct({ ...rest, id: undefined } as unknown as ProductRow);
-    setIsCreating(true);
   }
 
   function downloadCSV() {
@@ -244,18 +267,24 @@ export default function AllItemsPage() {
 
   // ── List view ──────────────────────────────────────────────────────────────
   return (
-    <div className="-mx-6 -mt-6">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50 pb-10">
       {/* Page header */}
-      <div className="border-b border-zinc-200 bg-white px-6 pb-0 pt-5">
-        <div className="flex items-start justify-between gap-4 pb-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-              Inventory
-            </h1>
-          </div>
+      <div className="border-b border-zinc-200 bg-white px-6 pb-0 pt-4 sm:px-8">
+        <nav className="text-sm text-zinc-400">
+          uaeorganisation <span className="mx-0.5">&gt;</span> Inventory{" "}
+          <span className="mx-0.5">&gt;</span>
+        </nav>
 
-          {/* Add Item button */}
-          <div className="flex items-stretch">
+        <div className="mt-1 flex items-start justify-between gap-4 pb-4">
+          <h1 className="flex items-center gap-2 text-[28px] font-bold leading-tight tracking-tight text-zinc-900">
+            Inventory
+            <span className="text-[22px] leading-none" aria-hidden>
+              💡
+            </span>
+          </h1>
+
+          {/* Add Item split button */}
+          <div className="flex shrink-0 items-stretch overflow-hidden rounded-md">
             <button
               onClick={() => {
                 setIsCreating(true);
@@ -266,18 +295,17 @@ export default function AllItemsPage() {
                 !manageInventory
                   ? "Enable Manage Inventory in settings first"
                   : warehouseCount === 0
-                  ? "Add a warehouse first"
-                  : undefined
+                    ? "Add a warehouse first"
+                    : undefined
               }
-              className="flex items-center gap-2 rounded-l-md bg-[#e91e8c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c4177a] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center gap-2 bg-[#e91e8c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c4177a] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="size-4" />
               Add Item
             </button>
-            <div className="w-px bg-[#c4177a]" />
             <button
               disabled={!canAdd}
-              className="flex items-center rounded-r-md bg-[#e91e8c] px-2 py-2 text-white hover:bg-[#c4177a] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center border-l border-[#c4177a]/60 bg-[#e91e8c] px-2.5 py-2 text-white hover:bg-[#c4177a] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ChevronDown className="size-4" />
             </button>
@@ -288,17 +316,20 @@ export default function AllItemsPage() {
         <div className="flex gap-0">
           <Link
             href="/products-inventory/all-items"
-            className="border-b-2 border-[#6d28d9] px-1 pb-3 text-sm font-semibold text-[#6d28d9]"
+            className="border-b-2 border-[#6d28d9] px-0.5 pb-3 text-sm font-semibold text-[#6d28d9]"
           >
             All Items
           </Link>
           <Link
             href="/products-inventory/warehouse"
-            className="ml-6 border-b-2 border-transparent pb-3 text-sm font-medium text-zinc-500 hover:text-zinc-700"
+            className="ml-6 border-b-2 border-transparent pb-3 text-sm font-medium text-zinc-600 hover:text-zinc-800"
           >
             Warehouses
           </Link>
-          <button className="ml-6 flex items-center gap-1 border-b-2 border-transparent pb-3 text-sm font-medium text-zinc-500 hover:text-zinc-700">
+          <button
+            type="button"
+            className="ml-6 flex items-center gap-0.5 border-b-2 border-transparent pb-3 text-sm font-medium text-zinc-600 hover:text-zinc-800"
+          >
             Reports &amp; More
             <ChevronRight className="size-3.5" />
           </button>
@@ -306,8 +337,7 @@ export default function AllItemsPage() {
       </div>
 
       {/* Content */}
-      <div className="px-6 py-5 space-y-5">
-
+      <div className="space-y-4 px-6 py-5 sm:px-8">
         {/* Gating hint */}
         {(!manageInventory || warehouseCount === 0) && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
@@ -342,89 +372,75 @@ export default function AllItemsPage() {
 
         {/* Controls row */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Inventory filter dropdown */}
-          <div className="relative">
+          <div className="relative min-w-[220px]">
             <select
               value={inventoryFilter}
               onChange={(e) => setInventoryFilter(e.target.value as InventoryFilter)}
-              className="appearance-none rounded-md border border-zinc-300 bg-white py-2 pl-3 pr-8 text-sm font-medium text-zinc-800 focus:border-[#6d28d9] focus:outline-none focus:ring-1 focus:ring-[#6d28d9]"
+              className="w-full appearance-none rounded-md border border-zinc-300 bg-white py-2 pl-3 pr-9 text-sm font-medium text-zinc-800 focus:border-[#6d28d9] focus:outline-none focus:ring-1 focus:ring-[#6d28d9]"
             >
               <option value="managed">Managed Inventory</option>
               <option value="unmanaged">Unmanaged Inventory</option>
               <option value="all">All Inventory</option>
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
-            {/* Download CSV */}
+          <div className="ml-auto flex flex-wrap items-center gap-3">
             <button
+              type="button"
               onClick={downloadCSV}
-              className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+              className="flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
-              <Download className="size-4" />
+              <Download className="size-4 text-zinc-500" />
               Download CSV
             </button>
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search items"
-                className="w-44 rounded-md border border-zinc-300 py-2 pl-9 pr-8 text-sm focus:border-[#6d28d9] focus:outline-none focus:ring-1 focus:ring-[#6d28d9]"
+                className="w-52 rounded-md border border-zinc-300 bg-white py-2 pl-9 pr-9 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-[#6d28d9] focus:outline-none focus:ring-1 focus:ring-[#6d28d9]"
               />
-              <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 text-xs">→</button>
+              <ArrowRight className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
             </div>
           </div>
         </div>
 
-        {/* Tabs (Active / Archived) */}
-        <div className="flex gap-1 border-b border-zinc-200">
-          {(["ACTIVE", "ARCHIVED"] as TabStatus[]).map((t) => (
+        {/* Filters */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-3">
             <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === t
-                  ? "border-[#6d28d9] text-[#6d28d9]"
-                  : "border-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-            >
-              {t === "ACTIVE" ? "Active" : "Archived"}
-            </button>
-          ))}
-        </div>
-
-        {/* Filters panel */}
-        <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
-          <div className="flex items-center gap-2">
-            <button
+              type="button"
               onClick={() => setFiltersOpen(!filtersOpen)}
-              className="flex items-center gap-1.5 text-sm font-semibold text-zinc-800"
+              className="flex items-center gap-1 text-sm font-semibold text-zinc-800"
             >
-              {filtersOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+              <ChevronDown
+                className={`size-4 transition-transform ${filtersOpen ? "" : "-rotate-90"}`}
+              />
               Filters
             </button>
-            {(search || inventoryFilter !== "all") && (
-              <button
-                onClick={() => { setSearch(""); setInventoryFilter("all"); }}
-                className="ml-2 flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700"
-              >
-                <X className="size-3" />
-                Clear All Filters
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setInventoryFilter("all");
+              }}
+              className="flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700"
+            >
+              <X className="size-3.5" />
+              Clear All Filters
+            </button>
           </div>
 
           {filtersOpen && (
-            <div className="mt-3">
+            <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">Applied Filters</p>
               <div className="flex flex-wrap gap-2">
                 {inventoryFilter !== "all" && (
-                  <span className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-700">
+                  <span className="inline-flex items-center gap-1.5 rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700">
                     <X
-                      className="size-3 cursor-pointer hover:text-zinc-900"
+                      className="size-3 cursor-pointer text-zinc-400 hover:text-zinc-700"
                       onClick={() => setInventoryFilter("all")}
                     />
                     {inventoryFilter === "managed" ? "Manage Stock: Yes" : "Manage Stock: No"}
@@ -432,16 +448,13 @@ export default function AllItemsPage() {
                   </span>
                 )}
                 {search && (
-                  <span className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-700">
+                  <span className="inline-flex items-center gap-1.5 rounded border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700">
                     <X
-                      className="size-3 cursor-pointer hover:text-zinc-900"
+                      className="size-3 cursor-pointer text-zinc-400 hover:text-zinc-700"
                       onClick={() => setSearch("")}
                     />
                     Search: {search}
                   </span>
-                )}
-                {inventoryFilter === "all" && !search && (
-                  <span className="text-xs text-zinc-400">No filters applied</span>
                 )}
               </div>
             </div>
@@ -459,36 +472,30 @@ export default function AllItemsPage() {
             <div className="flex items-center justify-between text-sm text-zinc-500">
               <span>
                 Showing{" "}
-                <strong className="text-zinc-800">
+                <strong className="font-semibold text-zinc-800">
                   {filtered.length === 0 ? 0 : 1}
                 </strong>{" "}
                 to{" "}
-                <strong className="text-zinc-800">{filtered.length}</strong>{" "}
-                of{" "}
-                <strong className="text-zinc-800">{filtered.length}</strong>{" "}
+                <strong className="font-semibold text-zinc-800">{filtered.length}</strong> of{" "}
+                <strong className="font-semibold text-zinc-800">{filtered.length}</strong>{" "}
                 {filtered.length === 1 ? "item" : "items"}
               </span>
-              <button className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">
-                <svg className="size-3.5" viewBox="0 0 14 14" fill="none">
-                  <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                  <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                  <rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                  <rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-                Show/Hide Columns
-              </button>
+              <ShowHideColumnsButton />
             </div>
 
             {/* Empty state */}
             {filtered.length === 0 && (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 py-16 text-center">
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white py-16 text-center">
                 <Package className="mb-3 size-10 text-zinc-300" />
                 <p className="font-medium text-zinc-700">
                   {search ? "No items match your search" : "No items yet"}
                 </p>
                 {!search && canAdd && (
                   <button
-                    onClick={() => { setIsCreating(true); setEditingProduct(null); }}
+                    onClick={() => {
+                      setIsCreating(true);
+                      setEditingProduct(null);
+                    }}
                     className="mt-4 flex items-center gap-2 rounded-md bg-[#e91e8c] px-4 py-2 text-sm font-medium text-white hover:bg-[#c4177a]"
                   >
                     <Plus className="size-4" />
@@ -500,46 +507,72 @@ export default function AllItemsPage() {
 
             {/* Items table */}
             {filtered.length > 0 && (
-              <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-md border border-zinc-200 bg-white">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-zinc-100 bg-zinc-50">
+                  <table className="w-full min-w-[960px] text-sm">
+                    <thead className="border-b border-zinc-200 bg-zinc-50">
                       <tr>
-                        <th className="w-8 px-3 py-3">
-                          <input type="checkbox" className="rounded border-zinc-300" />
+                        <th className="w-10 px-3 py-2.5">
+                          <input type="checkbox" className="size-3.5 rounded border-zinc-300" />
                         </th>
-                        <th className="px-3 py-3 text-left font-medium text-zinc-500 whitespace-nowrap">
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
                           Warehouse Details
                         </th>
-                        {[
-                          { label: "SKU", sort: true },
-                          { label: "Image", sort: false },
-                          { label: "Original Image", sort: false },
-                          { label: "Item", sort: true },
-                          { label: "Item Type", sort: true },
-                          { label: "Buying Price", sort: true },
-                          { label: "Selling Price", sort: true },
-                          { label: "Landed Cost", sort: true },
-                          { label: "Tax %", sort: false },
-                          { label: "Total Stock", sort: false },
-                          { label: "Stock Status", sort: false },
-                          { label: "Unit", sort: false },
-                        ].map(({ label, sort }) => (
-                          <th
-                            key={label}
-                            className="px-3 py-3 text-left font-medium text-zinc-500 whitespace-nowrap"
-                          >
-                            <span className="flex items-center gap-1">
-                              {label}
-                              {sort && (
-                                <svg className="size-3 text-zinc-400" viewBox="0 0 12 12" fill="none">
-                                  <path d="M6 2v8M3 5l3-3 3 3M3 7l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </span>
-                          </th>
-                        ))}
-                        <th className="px-3 py-3" />
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            SKU
+                            <TableFilterIcon />
+                          </span>
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          Image
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          Original Image
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            item
+                            <TableFilterIcon />
+                          </span>
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            Item Type
+                            <TableFilterIcon />
+                          </span>
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            Buying Price
+                            <TableSortIcon />
+                          </span>
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            Selling Price
+                            <TableSortIcon />
+                          </span>
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            Landed Cost
+                            <TableSortIcon />
+                          </span>
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          Tax %
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          Total Stock
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          Stock Status
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-zinc-500 whitespace-nowrap">
+                          Unit
+                        </th>
+                        <th className="w-20 px-3 py-2.5" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
@@ -549,70 +582,78 @@ export default function AllItemsPage() {
                         const rowExpanded = expandedRows.has(p.id);
 
                         return (
-                          <>
-                            <tr key={p.id} className="hover:bg-zinc-50">
-                              <td className="px-3 py-3">
-                                <input type="checkbox" className="rounded border-zinc-300" />
+                          <Fragment key={p.id}>
+                            <tr className="bg-white hover:bg-zinc-50/80">
+                              <td className="px-3 py-2.5">
+                                <input type="checkbox" className="size-3.5 rounded border-zinc-300" />
                               </td>
-                              {/* Warehouse Details expand */}
-                              <td className="px-3 py-3">
+                              <td className="px-3 py-2.5">
                                 <button
+                                  type="button"
                                   onClick={() => toggleRow(p.id)}
-                                  className="flex size-6 items-center justify-center rounded border border-zinc-300 bg-white text-zinc-500 hover:bg-zinc-50"
+                                  className="flex size-6 items-center justify-center rounded border border-zinc-300 bg-white text-sm text-zinc-500 hover:bg-zinc-50"
                                 >
                                   {rowExpanded ? "−" : "+"}
                                 </button>
                               </td>
-                              <td className="px-3 py-3 font-mono text-xs text-zinc-600 whitespace-nowrap">
+                              <td className="px-3 py-2.5 text-xs text-zinc-700 whitespace-nowrap">
                                 {p.sku || "—"}
                               </td>
-                              {/* Image */}
-                              <td className="px-3 py-3">
+                              <td className="px-3 py-2.5">
                                 {p.image ? (
-                                  <img src={p.image} alt="" className="size-8 rounded object-cover border border-zinc-100" />
+                                  <img
+                                    src={p.image}
+                                    alt=""
+                                    className="size-8 rounded border border-zinc-100 object-cover"
+                                  />
                                 ) : (
                                   <div className="flex size-8 items-center justify-center rounded border border-zinc-100 bg-zinc-50">
                                     <Package className="size-3.5 text-zinc-300" />
                                   </div>
                                 )}
                               </td>
-                              {/* Original Image */}
-                              <td className="px-3 py-3">
+                              <td className="px-3 py-2.5">
                                 {p.originalImage ? (
-                                  <img src={p.originalImage} alt="" className="size-8 rounded object-cover border border-zinc-100" />
+                                  <img
+                                    src={p.originalImage}
+                                    alt=""
+                                    className="size-8 rounded border border-zinc-100 object-cover"
+                                  />
                                 ) : (
                                   <div className="flex size-8 items-center justify-center rounded border border-zinc-100 bg-zinc-50">
                                     <Package className="size-3.5 text-zinc-300" />
                                   </div>
                                 )}
                               </td>
-                              <td className="px-3 py-3 font-medium text-zinc-900 whitespace-nowrap">
-                                {p.name}
+                              <td className="px-3 py-2.5 text-zinc-800 whitespace-nowrap">{p.name}</td>
+                              <td className="px-3 py-2.5 text-zinc-700 whitespace-nowrap">
+                                {formatItemType(p.itemType)}
                               </td>
-                              <td className="px-3 py-3 text-zinc-600">{p.itemType}</td>
-                              <td className="px-3 py-3 text-zinc-600 whitespace-nowrap">
-                                {p.buyingPrice != null ? `${p.currency ?? "AED"} ${p.buyingPrice.toFixed(2)}` : "—"}
+                              <td className="px-3 py-2.5 text-zinc-700 whitespace-nowrap">
+                                {formatPrice(p.currency, p.buyingPrice)}
                               </td>
-                              <td className="px-3 py-3 text-zinc-600 whitespace-nowrap">
-                                {p.sellingPrice != null ? `${p.currency ?? "AED"} ${p.sellingPrice.toFixed(2)}` : "—"}
+                              <td className="px-3 py-2.5 text-zinc-700 whitespace-nowrap">
+                                {formatPrice(p.currency, p.sellingPrice)}
                               </td>
-                              <td className="px-3 py-3 text-zinc-600 whitespace-nowrap">
-                                {p.landedCost != null ? `${p.currency ?? "AED"} ${p.landedCost.toFixed(2)}` : "—"}
+                              <td className="px-3 py-2.5 text-zinc-700 whitespace-nowrap">
+                                {formatPrice(p.currency, p.landedCost)}
                               </td>
-                              <td className="px-3 py-3 text-zinc-600">
+                              <td className="px-3 py-2.5 text-zinc-700">
                                 {p.taxRate != null ? `${p.taxRate}%` : "—"}
                               </td>
-                              <td className="px-3 py-3 font-medium text-zinc-900">{totalStock}</td>
-                              <td className="px-3 py-3">
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.cls}`}>
+                              <td className="px-3 py-2.5 font-medium text-zinc-800">{totalStock}</td>
+                              <td className="px-3 py-2.5">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.cls}`}
+                                >
                                   {badge.label}
                                 </span>
                               </td>
-                              <td className="px-3 py-3 text-zinc-500">{p.unit || "—"}</td>
-                              {/* Inline actions */}
-                              <td className="px-3 py-3">
-                                <div className="flex items-center gap-1">
+                              <td className="px-3 py-2.5 text-zinc-500">{p.unit || "—"}</td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex items-center gap-0.5">
                                   <button
+                                    type="button"
                                     onClick={() => setViewingProductId(p.id)}
                                     title="View"
                                     className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
@@ -620,50 +661,22 @@ export default function AllItemsPage() {
                                     <Eye className="size-4" />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => setEditingProduct(p)}
                                     title="Edit"
                                     className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
                                   >
                                     <Pencil className="size-4" />
                                   </button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <button className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">
-                                        <MoreHorizontal className="size-4" />
-                                      </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => startDuplicate(p)}>
-                                        <Copy className="mr-2 size-4" />
-                                        Duplicate
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => setAdjustingProduct(p)}>
-                                        <TrendingUp className="mr-2 size-4" />
-                                        Adjust Stock
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        variant="destructive"
-                                        onClick={() => {
-                                          if (window.confirm(`Archive "${p.name}"?`)) {
-                                            deleteMutation.mutate(p.id);
-                                          }
-                                        }}
-                                      >
-                                        <Trash2 className="mr-2 size-4" />
-                                        Archive
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
                                 </div>
                               </td>
                             </tr>
 
-                            {/* Expanded warehouse breakdown */}
                             {rowExpanded && (
-                              <tr key={`${p.id}-expanded`} className="bg-zinc-50">
+                              <tr className="bg-zinc-50">
                                 <td colSpan={15} className="px-6 py-3">
                                   <div className="rounded-md border border-zinc-200 bg-white p-3">
-                                    <p className="mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                                       Warehouse Stock Breakdown
                                     </p>
                                     {p.stockLevels.length === 0 ? (
@@ -682,9 +695,13 @@ export default function AllItemsPage() {
                                           {p.stockLevels.map((sl) => (
                                             <tr key={sl.warehouseId} className="border-t border-zinc-50">
                                               <td className="py-1 text-zinc-700">{sl.warehouse.name}</td>
-                                              <td className="py-1 text-right font-medium text-zinc-800">{sl.quantity}</td>
+                                              <td className="py-1 text-right font-medium text-zinc-800">
+                                                {sl.quantity}
+                                              </td>
                                               <td className="py-1 text-right text-zinc-600">{sl.committed}</td>
-                                              <td className="py-1 text-right text-zinc-600">{Math.max(0, sl.quantity - sl.committed)}</td>
+                                              <td className="py-1 text-right text-zinc-600">
+                                                {Math.max(0, sl.quantity - sl.committed)}
+                                              </td>
                                             </tr>
                                           ))}
                                         </tbody>
@@ -694,7 +711,7 @@ export default function AllItemsPage() {
                                 </td>
                               </tr>
                             )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -702,31 +719,18 @@ export default function AllItemsPage() {
                 </div>
               </div>
             )}
-
-            {/* Bottom count */}
-            {filtered.length > 0 && (
-              <div className="flex items-center justify-between text-sm text-zinc-500">
-                <span>
-                  Showing{" "}
-                  <strong className="text-zinc-800">1</strong> to{" "}
-                  <strong className="text-zinc-800">{filtered.length}</strong> of{" "}
-                  <strong className="text-zinc-800">{filtered.length}</strong>{" "}
-                  {filtered.length === 1 ? "item" : "items"}
-                </span>
-                <button className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50">
-                  <svg className="size-3.5" viewBox="0 0 14 14" fill="none">
-                    <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                    <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                    <rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                    <rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                  </svg>
-                  Show/Hide Columns
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>
+
+      {/* Floating chat */}
+      <button
+        type="button"
+        aria-label="Open chat"
+        className="fixed bottom-6 right-6 flex size-[68px] items-center justify-center rounded-full bg-[#7438dc] text-white shadow-xl transition-transform hover:scale-105"
+      >
+        <MessageCircle className="size-8 fill-white text-white" />
+      </button>
 
       {/* Drawers / Modals */}
       <ViewItemDrawer
