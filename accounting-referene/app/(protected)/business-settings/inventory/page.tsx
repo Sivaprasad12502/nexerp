@@ -22,12 +22,19 @@ type WarehouseRow = {
   id: string;
   name: string;
   warehouseCode?: string | null;
+  vatNumber?: string | null;
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  streetAddress?: string | null;
+  email?: string | null;
+  phone?: string | null;
   location?: string | null;
   contactInfo?: string | null;
   notes?: string | null;
   isDefault: boolean;
   warehouseStatus: string;
-  vatNumber?: string | null;
   _count?: { stockLevels: number };
 };
 
@@ -71,7 +78,7 @@ function AccordionSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white">
+    <div className="rounded-lg  ">
       <button
         type="button"
         onClick={() => setOpen(!open)}

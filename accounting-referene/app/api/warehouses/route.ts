@@ -52,9 +52,10 @@ export async function POST(req: NextRequest) {
 
   const data = result.data;
 
-  // Generate warehouse code (WH0001, WH0002…)
+  // Generate warehouse code (WH0001, WH0002…) if not supplied
   const totalCount = await prisma.warehouse.count({ where: { businessId: ctx.businessId } });
-  const warehouseCode = `WH${String(totalCount + 1).padStart(4, "0")}`;
+  const warehouseCode =
+    data.warehouseCode?.trim() || `WH${String(totalCount + 1).padStart(4, "0")}`;
 
   const shouldBeDefault = data.isDefault || totalCount === 0;
 
@@ -70,12 +71,19 @@ export async function POST(req: NextRequest) {
       businessId: ctx.businessId,
       name: data.name,
       warehouseCode,
+      vatNumber: data.vatNumber || null,
+      country: data.country || null,
+      state: data.state || null,
+      city: data.city || null,
+      postalCode: data.postalCode || null,
+      streetAddress: data.streetAddress || null,
+      email: data.email || null,
+      phone: data.phone || null,
       location: data.location || null,
       contactInfo: data.contactInfo || null,
       notes: data.notes || null,
       isDefault: shouldBeDefault,
       warehouseStatus: data.warehouseStatus ?? "ACTIVE",
-      vatNumber: data.vatNumber || null,
     },
   });
 

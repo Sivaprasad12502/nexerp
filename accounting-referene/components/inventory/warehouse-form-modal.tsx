@@ -3,17 +3,26 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { X, ChevronDown } from "lucide-react";
 import { warehouseCreateSchema, type WarehouseCreateInput } from "@/lib/validations/warehouse";
 
 type Warehouse = {
   id: string;
   name: string;
+  warehouseCode?: string | null;
+  vatNumber?: string | null;
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  streetAddress?: string | null;
+  email?: string | null;
+  phone?: string | null;
   location?: string | null;
   contactInfo?: string | null;
   notes?: string | null;
   isDefault: boolean;
   warehouseStatus?: string;
-  vatNumber?: string | null;
 };
 
 type Props = {
@@ -22,6 +31,18 @@ type Props = {
   onSaved: () => void;
   editingWarehouse?: Warehouse | null;
 };
+
+const INPUT =
+  "w-full rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-300 focus:border-[#6d28d9] focus:outline-none focus:ring-1 focus:ring-[#6d28d9]";
+
+function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className="mb-1.5 block text-sm text-zinc-700">
+      {children}
+      {required && <span className="ml-0.5 text-red-500">*</span>}
+    </label>
+  );
+}
 
 export function WarehouseFormModal({ open, onClose, onSaved, editingWarehouse }: Props) {
   const isEdit = !!editingWarehouse;
@@ -36,12 +57,20 @@ export function WarehouseFormModal({ open, onClose, onSaved, editingWarehouse }:
     resolver: zodResolver(warehouseCreateSchema) as any,
     defaultValues: {
       name: "",
+      warehouseCode: "",
+      vatNumber: "",
+      country: "United Arab Emirates (UAE)",
+      state: "",
+      city: "",
+      postalCode: "",
+      streetAddress: "",
+      email: "",
+      phone: "",
       location: "",
       contactInfo: "",
       notes: "",
       isDefault: false,
       warehouseStatus: "ACTIVE",
-      vatNumber: "",
     },
   });
 
@@ -51,22 +80,39 @@ export function WarehouseFormModal({ open, onClose, onSaved, editingWarehouse }:
         editingWarehouse
           ? {
               name: editingWarehouse.name,
+              warehouseCode: editingWarehouse.warehouseCode ?? "",
+              vatNumber: editingWarehouse.vatNumber ?? "",
+              country: editingWarehouse.country ?? "United Arab Emirates (UAE)",
+              state: editingWarehouse.state ?? "",
+              city: editingWarehouse.city ?? "",
+              postalCode: editingWarehouse.postalCode ?? "",
+              streetAddress: editingWarehouse.streetAddress ?? "",
+              email: editingWarehouse.email ?? "",
+              phone: editingWarehouse.phone ?? "",
               location: editingWarehouse.location ?? "",
               contactInfo: editingWarehouse.contactInfo ?? "",
               notes: editingWarehouse.notes ?? "",
               isDefault: editingWarehouse.isDefault,
-              warehouseStatus: (editingWarehouse.warehouseStatus as "ACTIVE" | "INACTIVE") ?? "ACTIVE",
-              vatNumber: editingWarehouse.vatNumber ?? "",
+              warehouseStatus:
+                (editingWarehouse.warehouseStatus as "ACTIVE" | "INACTIVE") ?? "ACTIVE",
             }
           : {
               name: "",
+              warehouseCode: "",
+              vatNumber: "",
+              country: "United Arab Emirates (UAE)",
+              state: "",
+              city: "",
+              postalCode: "",
+              streetAddress: "",
+              email: "",
+              phone: "",
               location: "",
               contactInfo: "",
               notes: "",
               isDefault: false,
               warehouseStatus: "ACTIVE",
-              vatNumber: "",
-            }
+            },
       );
     }
   }, [open, editingWarehouse, reset]);
@@ -98,100 +144,148 @@ export function WarehouseFormModal({ open, onClose, onSaved, editingWarehouse }:
     onClose();
   }
 
-  const INPUT =
-    "w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-[#6d28d9] focus:outline-none focus:ring-1 focus:ring-[#6d28d9]";
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-zinc-900">
-          {isEdit ? "Edit Warehouse" : "Add New Warehouse"}
-        </h2>
 
+      <div className="relative z-10 flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-7 py-5">
+          <h2 className="text-lg font-bold text-zinc-900">
+            {isEdit ? "Edit Warehouse" : "Add New Warehouse"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {/* Scrollable form body */}
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        <form onSubmit={handleSubmit(onSubmit as any)} className="mt-5 space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Warehouse Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              {...register("name")}
-              placeholder="e.g. Main Warehouse"
-              className={INPUT}
-            />
-            {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Address / Location
-            </label>
-            <input
-              {...register("location")}
-              placeholder="e.g. 123 Main Street, Abu Dhabi"
-              className={INPUT}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Contact Information
-            </label>
-            <input
-              {...register("contactInfo")}
-              placeholder="e.g. +971 50 123 4567"
-              className={INPUT}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit(onSubmit as any)} className="flex flex-col overflow-hidden">
+          <div className="flex-1 space-y-4 overflow-y-auto px-7 pb-2">
+            {/* Warehouse ID */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Status</label>
-              <select {...register("warehouseStatus")} className={INPUT}>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Warehouse VAT</label>
+              <Label>Warehouse ID</Label>
               <input
-                {...register("vatNumber")}
-                placeholder="VAT number"
+                {...register("warehouseCode")}
+                placeholder=""
                 className={INPUT}
               />
             </div>
+
+            {/* Warehouse Name */}
+            <div>
+              <Label required>Warehouse Name</Label>
+              <input
+                {...register("name")}
+                placeholder=""
+                className={INPUT}
+              />
+              {errors.name && (
+                <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>
+              )}
+            </div>
+
+            {/* Warehouse VAT */}
+            <div>
+              <Label>Warehouse VAT</Label>
+              <input {...register("vatNumber")} placeholder="" className={INPUT} />
+            </div>
+
+            {/* Country + State/Province */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label required>Country</Label>
+                <div className="relative">
+                  <input
+                    {...register("country")}
+                    className={INPUT}
+                  />
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+                </div>
+              </div>
+              <div>
+                <Label required>State / Province</Label>
+                <div className="relative">
+                  <input
+                    {...register("state")}
+                    placeholder="Select..."
+                    className={INPUT}
+                  />
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* City/Town + Postal Code */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label required>City / Town</Label>
+                <input {...register("city")} placeholder="" className={INPUT} />
+              </div>
+              <div>
+                <Label required>Postal Code / Zip Code</Label>
+                <input {...register("postalCode")} placeholder="" className={INPUT} />
+              </div>
+            </div>
+
+            {/* Street Address */}
+            <div>
+              <Label required>Street Address</Label>
+              <input {...register("streetAddress")} placeholder="" className={INPUT} />
+            </div>
+
+            {/* Email + Phone */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Email</Label>
+                <input
+                  {...register("email")}
+                  type="email"
+                  placeholder=""
+                  className={INPUT}
+                />
+                {errors.email && (
+                  <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>
+                )}
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <div className="flex overflow-hidden rounded-md border border-zinc-200 focus-within:border-[#6d28d9] focus-within:ring-1 focus-within:ring-[#6d28d9]">
+                  <div className="flex shrink-0 items-center gap-1 border-r border-zinc-200 bg-white px-2.5 py-2.5 text-sm text-zinc-700">
+                    <span>🇦🇪</span>
+                    <ChevronDown className="size-3 text-zinc-400" />
+                    <span className="ml-0.5">+971</span>
+                  </div>
+                  <input
+                    {...register("phone")}
+                    placeholder=""
+                    className="min-w-0 flex-1 bg-white px-3 py-2.5 text-sm text-zinc-800 outline-none placeholder:text-zinc-300"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700">Notes</label>
-            <textarea
-              {...register("notes")}
-              rows={2}
-              placeholder="Any additional notes…"
-              className={INPUT}
-            />
-          </div>
-
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
-            <input type="checkbox" {...register("isDefault")} className="rounded border-zinc-300" />
-            Set as default warehouse
-          </label>
-
-          <div className="flex justify-end gap-3 pt-2">
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t border-zinc-100 px-7 py-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+              className="text-sm text-zinc-600 hover:text-zinc-900"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-md bg-[#6d28d9] px-4 py-2 text-sm font-medium text-white hover:bg-[#5b21b6] disabled:opacity-60"
+              className="rounded-md bg-[#6d28d9] px-6 py-2 text-sm font-semibold text-white hover:bg-[#5b21b6] disabled:opacity-60"
             >
-              {isSubmitting ? "Saving…" : isEdit ? "Update Warehouse" : "Add Warehouse"}
+              {isSubmitting ? "Saving…" : isEdit ? "Update" : "Save"}
             </button>
           </div>
         </form>

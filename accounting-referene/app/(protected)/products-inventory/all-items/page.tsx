@@ -242,7 +242,7 @@ export default function AllItemsPage() {
   if (isCreating || editingProduct) {
     return (
       <div className="space-y-4">
-        <div>
+        <div className="p-4">
           <h1 className="text-xl font-semibold text-zinc-900">
             {editingProduct?.id ? "Edit Item" : "New Item"}
           </h1>

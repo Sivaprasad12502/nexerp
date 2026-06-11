@@ -49,12 +49,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     where: { id },
     data: {
       ...(data.name !== undefined && { name: data.name }),
+      ...(data.warehouseCode !== undefined && { warehouseCode: data.warehouseCode || null }),
+      ...(data.vatNumber !== undefined && { vatNumber: data.vatNumber || null }),
+      ...(data.country !== undefined && { country: data.country || null }),
+      ...(data.state !== undefined && { state: data.state || null }),
+      ...(data.city !== undefined && { city: data.city || null }),
+      ...(data.postalCode !== undefined && { postalCode: data.postalCode || null }),
+      ...(data.streetAddress !== undefined && { streetAddress: data.streetAddress || null }),
+      ...(data.email !== undefined && { email: data.email || null }),
+      ...(data.phone !== undefined && { phone: data.phone || null }),
       ...(data.location !== undefined && { location: data.location || null }),
       ...(data.contactInfo !== undefined && { contactInfo: data.contactInfo || null }),
       ...(data.notes !== undefined && { notes: data.notes || null }),
       ...(data.isDefault !== undefined && { isDefault: data.isDefault }),
       ...(data.warehouseStatus !== undefined && { warehouseStatus: data.warehouseStatus }),
-      ...(data.vatNumber !== undefined && { vatNumber: data.vatNumber || null }),
     },
   });
 
