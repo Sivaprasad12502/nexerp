@@ -50,6 +50,7 @@ model Business {
   clients     Client[]
   warehouses  Warehouse[]
   products    Product[]
+  quotations  Quotation[]
 }
 
 enum ContactStatus {
@@ -172,6 +173,7 @@ model Client {
   updatedAt DateTime     @updatedAt
 
   linkedContacts ClientContact[]
+  quotations     Quotation[]
 
   @@index([businessId, status])
 }
@@ -354,8 +356,9 @@ model Product {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  stockLevels WarehouseStock[]
-  adjustments StockAdjustment[]
+  stockLevels     WarehouseStock[]
+  adjustments     StockAdjustment[]
+  quotationItems  QuotationItem[]
 
   @@index([businessId, status])
 }
@@ -393,4 +396,112 @@ model StockAdjustment {
 
   @@index([businessId])
   @@index([productId])
+}
+
+// ─── Quotations ───────────────────────────────────────────────────────────────
+
+enum QuotationStatus {
+  DRAFT
+  SAVED
+  CANCELLED
+}
+
+model Quotation {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // Header
+  quotationNumber String
+  quotationDate   DateTime  @default(now())
+  validTillDate   DateTime?
+  subtitle        String?
+  logo            String?
+  currency        String    @default("AED")
+
+  // Quotation From (business snapshot / overrides)
+  fromName    String?
+  fromAddress String?
+  fromGstin   String?
+  fromPan     String?
+
+  // Quotation For (client)
+  clientId      String?
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName    String?
+  clientAddress String?
+  clientGstin   String?
+
+  // Shipping & transport (optional block)
+  shipFromWarehouseId String?
+  shippingName        String?
+  shippingAddress     String?
+  shippingPostalCode  String?
+  shippingState       String?
+  transporterName     String?
+  distance            String?
+  vehicleType         String?
+  vehicleNumber       String?
+  transportDocNumber  String?
+  transactionType     String?
+
+  // Discount & additional charges (quotation-level)
+  discountLabel     String?
+  discountAmount    Float @default(0)
+  additionalCharges Json  @default("[]")  // [{label, amount}]
+
+  // Totals snapshot (computed from items)
+  subTotal      Float @default(0)
+  totalTax      Float @default(0)
+  totalDiscount Float @default(0)
+  totalQuantity Float @default(0)
+  totalAmount   Float @default(0)
+  amountInWords String?
+
+  // Extras
+  termsAndConditions String?
+  notes              String?
+  signature          String?
+  additionalInfo     String?
+  contactDetails     String?
+  attachments        String[]
+  customFields       Json     @default("[]")  // [{label, value}]
+
+  // Advanced display settings (JSON blob of toggle states)
+  settings Json @default("{}")
+
+  status    QuotationStatus @default(DRAFT)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  items QuotationItem[]
+
+  @@index([businessId, status])
+}
+
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Snapshot fields
+  name        String
+  sku         String?
+  hsnSac      String?
+  unit        String?
+  description String?
+  image       String?
+  groupName   String?
+
+  quantity  Float @default(1)
+  rate      Float @default(0)
+  discount  Float @default(0)
+  taxRate   Float @default(0)
+  taxAmount Float @default(0)
+  amount    Float @default(0)
+  total     Float @default(0)
+  sortOrder Int   @default(0)
 }
