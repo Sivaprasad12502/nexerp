@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
-import { quotationCreateSchema } from "@/lib/validations/quotation";
+import { quotationCreateSchema, type QuotationItemInput } from "@/lib/validations/quotation";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
 
 // ─── Helper: auto-generate quotation number ───────────────────────────────────
@@ -14,7 +14,7 @@ async function generateQuotationNumber(businessId: string): Promise<string> {
 
 // ─── Helper: compute & attach calc results to items ──────────────────────────
 
-function enrichItems(items: { quantity: number; rate: number; discount: number; taxRate: number }[]) {
+function enrichItems(items: QuotationItemInput[]) {
   return items.map((item) => {
     const { amount, taxAmount, total } = calcItem(item);
     return { ...item, amount, taxAmount, total };

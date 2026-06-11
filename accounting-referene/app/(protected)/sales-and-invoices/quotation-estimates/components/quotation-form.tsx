@@ -35,7 +35,10 @@ import {
 } from "@/lib/validations/quotation";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
 import { Modal } from "@/components/ui/modal";
-import { ClientForm, type ClientRow } from "../../clients-prospects/components/client-form";
+import {
+  ClientForm,
+  type ClientRow,
+} from "../../clients-prospects/components/client-form";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +67,7 @@ type WarehouseBasic = {
 
 export type QuotationRow = {
   id: string;
+  quotationTitle: string;
   quotationNumber: string;
   quotationDate: string;
   validTillDate: string | null;
@@ -140,7 +144,16 @@ const numInputCls =
 const labelCls = "block text-xs font-medium text-zinc-600 mb-1";
 
 const CURRENCIES = [
-  "AED", "INR", "USD", "EUR", "GBP", "SGD", "SAR", "QAR", "KWD", "BHD",
+  "AED",
+  "INR",
+  "USD",
+  "EUR",
+  "GBP",
+  "SGD",
+  "SAR",
+  "QAR",
+  "KWD",
+  "BHD",
 ];
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -161,26 +174,41 @@ export function QuotationForm({
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [signatureUploading, setSignatureUploading] = useState(false);
-  const [showShipping, setShowShipping] = useState(initialData?.shipFromWarehouseId ? true : false);
+  const [showShipping, setShowShipping] = useState(
+    initialData?.shipFromWarehouseId ? true : false,
+  );
   const [showSubtitle, setShowSubtitle] = useState(!!initialData?.subtitle);
   const [showCustomFields, setShowCustomFields] = useState(
     (initialData?.customFields?.length ?? 0) > 0,
   );
-  const [showDiscount, setShowDiscount] = useState((initialData?.discountAmount ?? 0) > 0);
+  const [showDiscount, setShowDiscount] = useState(
+    (initialData?.discountAmount ?? 0) > 0,
+  );
   const [showAdditionalCharges, setShowAdditionalCharges] = useState(
     (initialData?.additionalCharges?.length ?? 0) > 0,
   );
-  const [showTotalInWords, setShowTotalInWords] = useState(!!initialData?.amountInWords);
+  const [showTotalInWords, setShowTotalInWords] = useState(
+    !!initialData?.amountInWords,
+  );
   const [showTerms, setShowTerms] = useState(!!initialData?.termsAndConditions);
   const [showNotes, setShowNotes] = useState(!!initialData?.notes);
   const [showSignature, setShowSignature] = useState(!!initialData?.signature);
-  const [showAdditionalInfo, setShowAdditionalInfo] = useState(!!initialData?.additionalInfo);
-  const [showContactDetails, setShowContactDetails] = useState(!!initialData?.contactDetails);
-  const [showAttachments, setShowAttachments] = useState((initialData?.attachments?.length ?? 0) > 0);
+  const [showAdditionalInfo, setShowAdditionalInfo] = useState(
+    !!initialData?.additionalInfo,
+  );
+  const [showContactDetails, setShowContactDetails] = useState(
+    !!initialData?.contactDetails,
+  );
+  const [showAttachments, setShowAttachments] = useState(
+    (initialData?.attachments?.length ?? 0) > 0,
+  );
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [productSearch, setProductSearch] = useState<Record<number, string>>({});
+  const [productSearch, setProductSearch] = useState<Record<number, string>>(
+    {},
+  );
   const [productDropdown, setProductDropdown] = useState<number | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const logoRef = useRef<HTMLInputElement>(null);
   const signatureRef = useRef<HTMLInputElement>(null);
@@ -196,9 +224,11 @@ export function QuotationForm({
     getValues,
     formState: { errors },
   } = useForm<QuotationCreateInput>({
-    resolver: zodResolver(quotationCreateSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(quotationCreateSchema) as any,
     defaultValues: initialData
       ? {
+          quotationTitle: initialData.quotationTitle,
           quotationNumber: initialData.quotationNumber,
           quotationDate: initialData.quotationDate
             ? new Date(initialData.quotationDate).toISOString().split("T")[0]
@@ -263,6 +293,7 @@ export function QuotationForm({
           })),
         }
       : {
+          quotationTitle: "",
           quotationNumber: "",
           quotationDate: new Date().toISOString().split("T")[0],
           validTillDate: "",
@@ -318,6 +349,7 @@ export function QuotationForm({
   const watchedDiscount = watch("discountAmount") ?? 0;
   const watchedCharges = watch("additionalCharges") ?? [];
   const watchedCurrency = watch("currency") ?? "AED";
+  const title = watch("quotationTitle");
 
   const additionalChargesTotal = watchedCharges.reduce(
     (s, c) => s + (Number(c.amount) || 0),
@@ -371,7 +403,9 @@ export function QuotationForm({
   // ── Mutations ──
   const save = useMutation({
     mutationFn: async (payload: QuotationCreateInput) => {
-      const url = isEdit ? `/api/quotations/${initialData!.id}` : "/api/quotations";
+      const url = isEdit
+        ? `/api/quotations/${initialData!.id}`
+        : "/api/quotations";
       const method = isEdit ? "PATCH" : "POST";
       const res = await fetch(url, {
         method,
@@ -379,7 +413,10 @@ export function QuotationForm({
         body: JSON.stringify(payload),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error?.items?.[0] ?? body.error ?? "Failed to save");
+      if (!res.ok)
+        throw new Error(
+          body.error?.items?.[0] ?? body.error ?? "Failed to save",
+        );
       return body;
     },
     onSuccess: (body) => {
@@ -391,7 +428,8 @@ export function QuotationForm({
   });
 
   const handleSave = (status: "DRAFT" | "SAVED") =>
-    handleSubmit((data) => save.mutate({ ...data, status }))();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handleSubmit((data) => save.mutate({ ...(data as any), status }))();
 
   // ── Logo upload ──
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -410,7 +448,9 @@ export function QuotationForm({
   };
 
   // ── Signature upload ──
-  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSignatureUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setSignatureUploading(true);
@@ -426,7 +466,9 @@ export function QuotationForm({
   };
 
   // ── Attachment upload ──
-  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const files = e.target.files;
     if (!files?.length) return;
     setAttachmentUploading(true);
@@ -526,7 +568,6 @@ export function QuotationForm({
       </Modal>
 
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
-
         {/* ═══════════════════════════════════════════════
             SECTION 1 — HEADER
         ═══════════════════════════════════════════════ */}
@@ -534,7 +575,27 @@ export function QuotationForm({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             {/* Left: title + meta fields */}
             <div className="flex-1">
-              <h2 className="text-2xl font-semibold text-zinc-950">Quotation</h2>
+              {isEditing ? (
+                <input
+                  {...register("quotationTitle")}
+                  autoFocus
+                  onBlur={() => setIsEditing(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      setIsEditing(false);
+                    }
+                  }}
+                  className="w-full text-center mb-4 h-auto border-0 bg-transparent p-0 text-2xl font-semibold shadow-none focus-visible:ring-0 outline-none"
+                />
+              ) : (
+                <h2
+                  onClick={() => setIsEditing(true)}
+                  className="cursor-text mb-4 text-2xl font-semibold text-zinc-950 text-center"
+                >
+                  {title || "Quotation"}
+                </h2>
+              )}
 
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Quotation No */}
@@ -549,12 +610,20 @@ export function QuotationForm({
                 {/* Quotation Date */}
                 <div>
                   <label className={labelCls}>Quotation Date</label>
-                  <input {...register("quotationDate")} type="date" className={inputCls} />
+                  <input
+                    {...register("quotationDate")}
+                    type="date"
+                    className={inputCls}
+                  />
                 </div>
                 {/* Valid Till */}
                 <div>
                   <label className={labelCls}>Valid Till Date</label>
-                  <input {...register("validTillDate")} type="date" className={inputCls} />
+                  <input
+                    {...register("validTillDate")}
+                    type="date"
+                    className={inputCls}
+                  />
                 </div>
               </div>
 
@@ -727,7 +796,9 @@ export function QuotationForm({
             <div className="flex items-center gap-2 mb-4">
               <FileText className="size-4 text-zinc-400" />
               <h3 className="font-medium text-zinc-950">Quotation For</h3>
-              <span className="text-xs text-zinc-400">(Client&apos;s Details)</span>
+              <span className="text-xs text-zinc-400">
+                (Client&apos;s Details)
+              </span>
             </div>
 
             {/* Client picker */}
@@ -803,7 +874,9 @@ export function QuotationForm({
               onChange={(e) => setShowShipping(e.target.checked)}
               className="size-4 rounded border-zinc-300 accent-[#7438dc]"
             />
-            <span className="text-sm font-medium text-zinc-800">Add Shipping Details</span>
+            <span className="text-sm font-medium text-zinc-800">
+              Add Shipping Details
+            </span>
           </label>
 
           {showShipping && (
@@ -924,7 +997,10 @@ export function QuotationForm({
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-white px-6 py-3 shadow-sm ring-1 ring-zinc-100">
           <div className="flex items-center gap-2">
             <label className={`${labelCls} mb-0`}>Currency</label>
-            <select {...register("currency")} className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-950 outline-none focus:border-[#7438dc]">
+            <select
+              {...register("currency")}
+              className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-950 outline-none focus:border-[#7438dc]"
+            >
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -961,17 +1037,35 @@ export function QuotationForm({
                 <col className="w-[5%]" />
                 <col className="w-[6%]" />
               </colgroup>
-              <thead className="bg-zinc-50 border-b border-zinc-100">
+              <thead className="bg-[#7438DC] border-b border-zinc-100">
                 <tr>
-                  <th className="py-3 pl-4 pr-2 text-left text-xs font-semibold text-zinc-600">#. Item Name / SKU</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">TAX Rate</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">Qty</th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-zinc-600">Unit</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">Rate</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">Amount</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">TAX</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">Total</th>
-                  <th className="px-2 py-3 text-right text-xs font-semibold text-zinc-600">Disc.</th>
+                  <th className="py-3 pl-4 pr-2 text-left text-xs font-semibold text-white">
+                    #. Item Name / SKU
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    TAX Rate
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    Qty
+                  </th>
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-white">
+                    Unit
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    Rate
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    Amount
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    TAX
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    Total
+                  </th>
+                  <th className="px-2 py-3 text-right text-xs font-semibold text-white">
+                    Disc.
+                  </th>
                   <th className="px-2 py-3" />
                 </tr>
               </thead>
@@ -1063,11 +1157,13 @@ export function QuotationForm({
             </button>
           </div>
 
-          {errors.items && typeof errors.items === "object" && "message" in errors.items && (
-            <p className="px-4 pb-3 text-xs text-red-500">
-              {(errors.items as FieldError).message}
-            </p>
-          )}
+          {errors.items &&
+            typeof errors.items === "object" &&
+            "message" in errors.items && (
+              <p className="px-4 pb-3 text-xs text-red-500">
+                {(errors.items as FieldError).message}
+              </p>
+            )}
         </div>
 
         {/* ═══════════════════════════════════════════════
@@ -1139,7 +1235,9 @@ export function QuotationForm({
                       className="h-8 flex-1 rounded-md border border-zinc-200 px-2 text-sm outline-none focus:border-[#7438dc]"
                     />
                     <input
-                      {...register(`additionalCharges.${i}.amount`, { valueAsNumber: true })}
+                      {...register(`additionalCharges.${i}.amount`, {
+                        valueAsNumber: true,
+                      })}
                       type="number"
                       min={0}
                       step="0.01"
@@ -1157,7 +1255,9 @@ export function QuotationForm({
                 ))}
                 <button
                   type="button"
-                  onClick={() => appendCharge({ label: "Additional Charge", amount: 0 })}
+                  onClick={() =>
+                    appendCharge({ label: "Additional Charge", amount: 0 })
+                  }
                   className="flex items-center gap-1 text-sm text-[#7438dc] hover:underline"
                 >
                   <Plus className="size-3.5" /> Add Charge
@@ -1211,12 +1311,20 @@ export function QuotationForm({
         ═══════════════════════════════════════════════ */}
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Terms & Conditions */}
-          <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-zinc-100">
+          <div className="rounded-xl bg-white p-5 shadow-sm border-2 border-dotted">
             {showTerms ? (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-800">Terms &amp; Conditions</label>
-                  <button type="button" onClick={() => { setShowTerms(false); setValue("termsAndConditions", ""); }}>
+                  <label className="text-sm font-medium text-zinc-800">
+                    Terms &amp; Conditions
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTerms(false);
+                      setValue("termsAndConditions", "");
+                    }}
+                  >
                     <X className="size-4 text-zinc-400 hover:text-red-500" />
                   </button>
                 </div>
@@ -1239,12 +1347,20 @@ export function QuotationForm({
           </div>
 
           {/* Notes */}
-          <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-zinc-100">
+          <div className="rounded-xl bg-white p-5 shadow-sm border-2 border-dotted">
             {showNotes ? (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-800">Notes</label>
-                  <button type="button" onClick={() => { setShowNotes(false); setValue("notes", ""); }}>
+                  <label className="text-sm font-medium text-zinc-800">
+                    Notes
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNotes(false);
+                      setValue("notes", "");
+                    }}
+                  >
                     <X className="size-4 text-zinc-400 hover:text-red-500" />
                   </button>
                 </div>
@@ -1267,19 +1383,31 @@ export function QuotationForm({
           </div>
 
           {/* Signature */}
-          <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-zinc-100">
+          <div className="rounded-xl bg-white p-5 shadow-sm  border-2 border-dotted ">
             {showSignature ? (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-800">Signature</label>
-                  <button type="button" onClick={() => { setShowSignature(false); setValue("signature", ""); }}>
+                  <label className="text-sm font-medium text-zinc-800">
+                    Signature
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSignature(false);
+                      setValue("signature", "");
+                    }}
+                  >
                     <X className="size-4 text-zinc-400 hover:text-red-500" />
                   </button>
                 </div>
                 {watchedSignature ? (
                   <div className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={watchedSignature} alt="Signature" className="h-16 rounded-md border border-zinc-200 object-contain" />
+                    <img
+                      src={watchedSignature}
+                      alt="Signature"
+                      className="h-16 rounded-md border border-zinc-200 object-contain"
+                    />
                     <button
                       type="button"
                       onClick={() => setValue("signature", "")}
@@ -1298,7 +1426,9 @@ export function QuotationForm({
                     {signatureUploading ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
-                      <><Pen className="size-4" /> Upload signature</>
+                      <>
+                        <Pen className="size-4" /> Upload signature
+                      </>
                     )}
                   </button>
                 )}
@@ -1322,12 +1452,20 @@ export function QuotationForm({
           </div>
 
           {/* Additional Info */}
-          <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-zinc-100">
+          <div className="rounded-xl bg-white p-5 shadow-sm border-2 border-dotted">
             {showAdditionalInfo ? (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-800">Additional Information</label>
-                  <button type="button" onClick={() => { setShowAdditionalInfo(false); setValue("additionalInfo", ""); }}>
+                  <label className="text-sm font-medium text-zinc-800">
+                    Additional Information
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAdditionalInfo(false);
+                      setValue("additionalInfo", "");
+                    }}
+                  >
                     <X className="size-4 text-zinc-400 hover:text-red-500" />
                   </button>
                 </div>
@@ -1350,12 +1488,20 @@ export function QuotationForm({
           </div>
 
           {/* Contact Details */}
-          <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-zinc-100">
+          <div className="rounded-xl bg-white p-5 shadow-sm border-2 border-dotted">
             {showContactDetails ? (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-800">Contact Details</label>
-                  <button type="button" onClick={() => { setShowContactDetails(false); setValue("contactDetails", ""); }}>
+                  <label className="text-sm font-medium text-zinc-800">
+                    Contact Details
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowContactDetails(false);
+                      setValue("contactDetails", "");
+                    }}
+                  >
                     <X className="size-4 text-zinc-400 hover:text-red-500" />
                   </button>
                 </div>
@@ -1382,7 +1528,9 @@ export function QuotationForm({
             {showAttachments ? (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-800">Attachments</label>
+                  <label className="text-sm font-medium text-zinc-800">
+                    Attachments
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
@@ -1395,14 +1543,22 @@ export function QuotationForm({
                 </div>
                 <div className="space-y-1.5 mb-2">
                   {watchedAttachments.map((url, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-zinc-600">
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 text-xs text-zinc-600"
+                    >
                       <FileText className="size-3.5 flex-shrink-0 text-zinc-400" />
-                      <span className="truncate flex-1">{url.split("/").pop()}</span>
+                      <span className="truncate flex-1">
+                        {url.split("/").pop()}
+                      </span>
                       <button
                         type="button"
                         onClick={() => {
                           const current = getValues("attachments") ?? [];
-                          setValue("attachments", current.filter((_, j) => j !== i));
+                          setValue(
+                            "attachments",
+                            current.filter((_, j) => j !== i),
+                          );
                         }}
                         className="text-zinc-400 hover:text-red-500"
                       >
@@ -1420,7 +1576,9 @@ export function QuotationForm({
                   {attachmentUploading ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <><Upload className="size-4" /> Upload files</>
+                    <>
+                      <Upload className="size-4" /> Upload files
+                    </>
                   )}
                 </button>
                 <input
@@ -1473,7 +1631,9 @@ export function QuotationForm({
                 name="settings.displayUnitAs"
                 render={({ field }) => (
                   <select {...field} className={`${selectCls} max-w-xs`}>
-                    <option value="mergeWithQuantity">Merge with Quantity</option>
+                    <option value="mergeWithQuantity">
+                      Merge with Quantity
+                    </option>
                     <option value="mergeWithName">Merge with Name</option>
                     <option value="doNotShow">Do not show</option>
                   </select>
@@ -1486,14 +1646,20 @@ export function QuotationForm({
                   ["hideCountryOfSupply", "Hide Country of Supply"],
                   ["addOriginalImages", "Add Original Images in Line Items"],
                   ["showThumbnails", "Show Thumbnails in Separate Column"],
-                  ["showFullWidthDescription", "Show Description in Full Width"],
+                  [
+                    "showFullWidthDescription",
+                    "Show Description in Full Width",
+                  ],
                   ["hideSubtotalForGroups", "Hide Subtotal for Group Items"],
                   ["showSku", "Show SKU in Quotation"],
                   ["showSerialNumbers", "Show Serial Numbers in Quotation"],
                   ["showBatchDetails", "Display Batch Details in Quotation"],
                   ["showHsnSummary", "Show HSN Summary"],
                 ].map(([key, label]) => (
-                  <label key={key} className="flex cursor-pointer items-center gap-2.5 rounded-md p-2 hover:bg-zinc-50">
+                  <label
+                    key={key}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-md p-2 hover:bg-zinc-50"
+                  >
                     <Controller
                       control={control}
                       name={`settings.${key as keyof QuotationSettings}`}
@@ -1543,7 +1709,9 @@ export function QuotationForm({
               disabled={save.isPending || logoUploading || signatureUploading}
               className="flex items-center gap-2 rounded-lg border border-[#7438dc] px-4 py-2 text-sm font-medium text-[#7438dc] hover:bg-[#7438dc]/5 transition-colors disabled:opacity-50"
             >
-              {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {save.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               Save As Draft
             </button>
             <button
@@ -1552,7 +1720,9 @@ export function QuotationForm({
               disabled={save.isPending || logoUploading || signatureUploading}
               className="flex items-center gap-2 rounded-lg bg-[#7438dc] px-4 py-2 text-sm font-medium text-white hover:bg-[#6330c2] transition-colors disabled:opacity-50"
             >
-              {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {save.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               Save &amp; Continue
             </button>
           </div>
@@ -1587,7 +1757,9 @@ function ItemRow({
   register: ReturnType<typeof useForm<QuotationCreateInput>>["register"];
   watch: ReturnType<typeof useForm<QuotationCreateInput>>["watch"];
   setValue: ReturnType<typeof useForm<QuotationCreateInput>>["setValue"];
-  errors: ReturnType<typeof useForm<QuotationCreateInput>>["formState"]["errors"];
+  errors: ReturnType<
+    typeof useForm<QuotationCreateInput>
+  >["formState"]["errors"];
   currency: string;
   products: ProductBasic[];
   filteredProducts: ProductBasic[];
@@ -1607,9 +1779,9 @@ function ItemRow({
   const [itemImageUploading, setItemImageUploading] = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
 
-  const itemErrors = (errors.items as Record<string, unknown>[] | undefined)?.[idx] as
-    | Record<string, { message?: string }>
-    | undefined;
+  const itemErrors = (errors.items as Record<string, unknown>[] | undefined)?.[
+    idx
+  ] as Record<string, { message?: string }> | undefined;
 
   const amount = watch(`items.${idx}.amount`) ?? 0;
   const taxAmount = watch(`items.${idx}.taxAmount`) ?? 0;
@@ -1690,7 +1862,11 @@ function ItemRow({
                   >
                     <div>
                       <div className="font-medium text-zinc-900">{p.name}</div>
-                      {p.sku && <div className="text-xs text-zinc-400">SKU: {p.sku}</div>}
+                      {p.sku && (
+                        <div className="text-xs text-zinc-400">
+                          SKU: {p.sku}
+                        </div>
+                      )}
                     </div>
                     {p.sellingPrice !== null && (
                       <div className="text-xs font-medium text-zinc-600">
@@ -1703,7 +1879,9 @@ function ItemRow({
             )}
           </div>
           {itemErrors?.name?.message && (
-            <p className="mt-0.5 text-xs text-red-500">{itemErrors.name.message}</p>
+            <p className="mt-0.5 text-xs text-red-500">
+              {itemErrors.name.message}
+            </p>
           )}
           {/* Row extras */}
           <div className="mt-1.5 flex flex-wrap gap-2">
@@ -1744,7 +1922,11 @@ function ItemRow({
               {itemImage ? (
                 <div className="relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={itemImage} alt="Item" className="h-10 w-10 rounded object-cover border border-zinc-200" />
+                  <img
+                    src={itemImage}
+                    alt="Item"
+                    className="h-10 w-10 rounded object-cover border border-zinc-200"
+                  />
                   <button
                     type="button"
                     onClick={() => setValue(`items.${idx}.image`, "")}
@@ -1797,7 +1979,9 @@ function ItemRow({
             step="0.01"
             placeholder="0"
             onChange={(e) => {
-              register(`items.${idx}.taxRate`, { valueAsNumber: true }).onChange(e);
+              register(`items.${idx}.taxRate`, {
+                valueAsNumber: true,
+              }).onChange(e);
               setTimeout(onCalcUpdate, 0);
             }}
             className={numInputCls}
@@ -1814,7 +1998,9 @@ function ItemRow({
             step="0.001"
             placeholder="1"
             onChange={(e) => {
-              register(`items.${idx}.quantity`, { valueAsNumber: true }).onChange(e);
+              register(`items.${idx}.quantity`, {
+                valueAsNumber: true,
+              }).onChange(e);
               setTimeout(onCalcUpdate, 0);
             }}
             className={numInputCls}
@@ -1839,7 +2025,9 @@ function ItemRow({
             step="0.01"
             placeholder="0.00"
             onChange={(e) => {
-              register(`items.${idx}.rate`, { valueAsNumber: true }).onChange(e);
+              register(`items.${idx}.rate`, { valueAsNumber: true }).onChange(
+                e,
+              );
               setTimeout(onCalcUpdate, 0);
             }}
             className={numInputCls}
@@ -1870,7 +2058,9 @@ function ItemRow({
             step="0.01"
             placeholder="0"
             onChange={(e) => {
-              register(`items.${idx}.discount`, { valueAsNumber: true }).onChange(e);
+              register(`items.${idx}.discount`, {
+                valueAsNumber: true,
+              }).onChange(e);
               setTimeout(onCalcUpdate, 0);
             }}
             className={numInputCls}

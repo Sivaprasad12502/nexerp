@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
-import { quotationUpdateSchema } from "@/lib/validations/quotation";
+import { quotationUpdateSchema, type QuotationItemInput } from "@/lib/validations/quotation";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
-function enrichItems(items: { quantity: number; rate: number; discount: number; taxRate: number }[]) {
+function enrichItems(items: QuotationItemInput[]) {
   return items.map((item) => {
     const { amount, taxAmount, total } = calcItem(item);
     return { ...item, amount, taxAmount, total };

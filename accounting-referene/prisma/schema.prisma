@@ -411,7 +411,8 @@ model Quotation {
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  // Header
+  // Header 
+  quotationTitle  String?
   quotationNumber String
   quotationDate   DateTime  @default(now())
   validTillDate   DateTime?

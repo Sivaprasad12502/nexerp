@@ -59,7 +59,19 @@ export const quotationSettingsSchema = z.object({
   showSerialNumbers: z.boolean().default(false),
   showBatchDetails: z.boolean().default(false),
   showHsnSummary: z.boolean().default(false),
-}).default({});
+}).default({
+  displayUnitAs: "mergeWithQuantity",
+  showTaxSummary: false,
+  hideCountryOfSupply: false,
+  addOriginalImages: false,
+  showThumbnails: false,
+  showFullWidthDescription: false,
+  hideSubtotalForGroups: false,
+  showSku: false,
+  showSerialNumbers: false,
+  showBatchDetails: false,
+  showHsnSummary: false,
+});
 
 export type QuotationSettings = z.infer<typeof quotationSettingsSchema>;
 
@@ -67,6 +79,7 @@ export type QuotationSettings = z.infer<typeof quotationSettingsSchema>;
 
 export const quotationCreateSchema = z.object({
   // Header
+  quotationTitle: optionalStr(200),
   quotationNumber: optionalStr(80),
   quotationDate: z.string().optional().or(z.literal("")),
   validTillDate: z.string().optional().or(z.literal("")).or(z.null()),
