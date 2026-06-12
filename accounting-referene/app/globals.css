@@ -117,6 +117,27 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ── Quotation Print Styles ───────────────────────────────────────────────── */
+@media print {
+  /* Hide everything except the quotation document */
+  body > * {
+    display: none !important;
+  }
+  .quotation-print-area {
+    display: block !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .quotation-print-area * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -48,6 +48,7 @@ export const customFieldSchema = z.object({
 // ─── Advanced Settings ────────────────────────────────────────────────────────
 
 export const quotationSettingsSchema = z.object({
+  // ── Existing display toggles ──
   displayUnitAs: z.enum(["mergeWithQuantity", "mergeWithName", "doNotShow"]).default("mergeWithQuantity"),
   showTaxSummary: z.boolean().default(false),
   hideCountryOfSupply: z.boolean().default(false),
@@ -59,6 +60,27 @@ export const quotationSettingsSchema = z.object({
   showSerialNumbers: z.boolean().default(false),
   showBatchDetails: z.boolean().default(false),
   showHsnSummary: z.boolean().default(false),
+
+  // ── Design / Template ──
+  template: z.enum(["professional", "modern", "simple", "classic"]).default("professional"),
+  themeColor: z.string().default("#7438dc"),
+  fontFamily: z.enum(["inter", "serif", "sans", "mono"]).default("inter"),
+
+  // ── PDF configuration ──
+  pageSize: z.enum(["A4", "Letter", "Legal", "A5"]).default("A4"),
+  margin: z.enum(["normal", "narrow", "wide"]).default("normal"),
+
+  // ── Script / number format ──
+  numberFormat: z.string().default("en-IN"),
+
+  // ── Optional document blocks (shared data from BusinessSettings) ──
+  showLetterhead:   z.boolean().default(false),
+  showFooter:       z.boolean().default(false),
+  showWatermark:    z.boolean().default(false),
+  watermarkOpacity: z.number().min(0.05).max(1).default(0.15),
+  showBankDetails:  z.boolean().default(false),
+  showUpiDetails:   z.boolean().default(false),
+  showBatchSummary: z.boolean().default(false),
 }).default({
   displayUnitAs: "mergeWithQuantity",
   showTaxSummary: false,
@@ -71,6 +93,19 @@ export const quotationSettingsSchema = z.object({
   showSerialNumbers: false,
   showBatchDetails: false,
   showHsnSummary: false,
+  template: "professional",
+  themeColor: "#7438dc",
+  fontFamily: "inter",
+  pageSize: "A4",
+  margin: "normal",
+  numberFormat: "en-IN",
+  showLetterhead: false,
+  showFooter: false,
+  showWatermark: false,
+  watermarkOpacity: 0.15,
+  showBankDetails: false,
+  showUpiDetails: false,
+  showBatchSummary: false,
 });
 
 export type QuotationSettings = z.infer<typeof quotationSettingsSchema>;

@@ -1685,7 +1685,7 @@ export function QuotationForm({
           SAVE BAR (sticky bottom)
       ═══════════════════════════════════════════════ */}
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-zinc-100 bg-white px-6 py-3 shadow-lg">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-start gap-3">
           <button
             type="button"
             onClick={onCancel}

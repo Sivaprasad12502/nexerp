@@ -71,7 +71,7 @@ export default function EditQuotationPage({
         <QuotationForm
           initialData={q}
           onCancel={() => router.push("/sales-and-invoices/quotation-estimates")}
-          onSaved={() => router.push("/sales-and-invoices/quotation-estimates")}
+          onSaved={(id) => router.push(`/sales-and-invoices/quotation-estimates/${id}`)}
         />
       </div>
     </div>

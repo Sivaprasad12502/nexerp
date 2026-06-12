@@ -34,7 +34,7 @@ export default function NewQuotationPage() {
           onCancel={() => router.push("/sales-and-invoices/quotation-estimates")}
           onSaved={(id) =>
             router.push(
-              `/sales-and-invoices/quotation-estimates/${id}/edit`,
+              `/sales-and-invoices/quotation-estimates/${id}`,
             )
           }
         />

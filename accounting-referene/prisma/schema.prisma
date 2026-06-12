@@ -51,6 +51,42 @@ model Business {
   warehouses  Warehouse[]
   products    Product[]
   quotations  Quotation[]
+
+  businessSettings BusinessSettings?
+}
+
+// ─── Business Settings (branding + finance defaults) ──────────────────────────
+
+model BusinessSettings {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // Bank details
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  bankIfsc          String?
+  bankBranch        String?
+  bankSwift         String?
+
+  // UPI
+  upiId    String?
+  upiQrUrl String?   // S3 URL of uploaded QR image
+
+  // Branding
+  letterheadUrl String?   // S3 URL of letterhead image
+  footerText    String?
+  watermarkText String?
+  watermarkUrl  String?   // S3 URL of watermark image (optional, text fallback)
+
+  // Default design preferences (applied to new quotations)
+  defaultTemplate   String?   // e.g. "professional"
+  defaultThemeColor String?   // hex e.g. "#7438dc"
+  defaultFontFamily String?   // e.g. "inter"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ContactStatus {
