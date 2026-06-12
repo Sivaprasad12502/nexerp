@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       data: {
         businessId: ctx.businessId,
         quotationNumber,
+        quotationTitle: data.quotationTitle || null,
         quotationDate: data.quotationDate ? new Date(data.quotationDate) : new Date(),
         validTillDate: data.validTillDate ? new Date(data.validTillDate) : null,
         subtitle: data.subtitle || null,

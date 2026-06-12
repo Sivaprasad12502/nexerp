@@ -10,22 +10,35 @@ export default function NewQuotationPage() {
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50 pb-10">
       {/* Header */}
-      <div className="border-b border-zinc-200 bg-white px-6 py-4 sm:px-8">
-        <nav className="flex items-center gap-1 text-sm text-zinc-400">
-          <span
-            className="cursor-pointer hover:text-zinc-700"
-            onClick={() =>
-              router.push("/sales-and-invoices/quotation-estimates")
-            }
-          >
-            Quotations
-          </span>
-          <ChevronRight className="size-3.5" />
-          <span className="text-zinc-900">New Quotation</span>
-        </nav>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-900">
-          New Quotation
+      <div className="border-b border-zinc-200 bg-white px-6 py-6 sm:px-8">
+        <h1 className="text-center text-2xl font-bold text-zinc-900">
+          Create New Quotation
         </h1>
+
+        {/* Step indicator */}
+        <div className="mt-4 flex items-center justify-center gap-3">
+          {/* Step 1 — active */}
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-full bg-[#7438dc] text-xs font-bold text-white">
+              1
+            </span>
+            <span className="text-sm font-semibold text-zinc-900">
+              Quotation Details
+            </span>
+          </div>
+
+          <ChevronRight className="size-4 text-zinc-300" />
+
+          {/* Step 2 — inactive */}
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-full border-2 border-zinc-300 text-xs font-semibold text-zinc-400">
+              2
+            </span>
+            <span className="text-sm font-medium text-zinc-400">
+              Design &amp; Share (optional)
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Form */}

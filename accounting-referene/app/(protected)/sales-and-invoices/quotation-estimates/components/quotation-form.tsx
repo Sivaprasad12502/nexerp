@@ -25,6 +25,7 @@ import {
   Layers,
   Settings2,
   Pen,
+  Gem,
 } from "lucide-react";
 
 import { uploadFile } from "@/lib/upload";
@@ -204,7 +205,10 @@ export function QuotationForm({
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [productSearch, setProductSearch] = useState<Record<number, string>>(
-    {},
+    () =>
+      initialData
+        ? Object.fromEntries(initialData.items.map((item, i) => [i, item.name]))
+        : {},
   );
   const [productDropdown, setProductDropdown] = useState<number | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -228,7 +232,7 @@ export function QuotationForm({
     resolver: zodResolver(quotationCreateSchema) as any,
     defaultValues: initialData
       ? {
-          quotationTitle: initialData.quotationTitle,
+          quotationTitle: initialData.quotationTitle ?? "",
           quotationNumber: initialData.quotationNumber,
           quotationDate: initialData.quotationDate
             ? new Date(initialData.quotationDate).toISOString().split("T")[0]
@@ -429,7 +433,17 @@ export function QuotationForm({
 
   const handleSave = (status: "DRAFT" | "SAVED") =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handleSubmit((data) => save.mutate({ ...(data as any), status }))();
+    handleSubmit(
+      (data) => save.mutate({ ...(data as any), status }),
+      (errs) => {
+        const firstMsg = Object.values(errs)
+          .flatMap((e) => (Array.isArray(e) ? e : [e]))
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((e: any) => e?.message ?? e?.name?.message)
+          .find(Boolean);
+        toast.error(firstMsg ?? "Please fix form errors before saving");
+      },
+    )();
 
   // ── Logo upload ──
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -575,29 +589,75 @@ export function QuotationForm({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             {/* Left: title + meta fields */}
             <div className="flex-1">
-              {isEditing ? (
-                <input
-                  {...register("quotationTitle")}
-                  autoFocus
-                  onBlur={() => setIsEditing(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      setIsEditing(false);
-                    }
-                  }}
-                  className="w-full text-center mb-4 h-auto border-0 bg-transparent p-0 text-2xl font-semibold shadow-none focus-visible:ring-0 outline-none"
-                />
-              ) : (
-                <h2
-                  onClick={() => setIsEditing(true)}
-                  className="cursor-text mb-4 text-2xl font-semibold text-zinc-950 text-center"
-                >
-                  {title || "Quotation"}
-                </h2>
-              )}
+              {/* ── Title block ── */}
+              <div className="mb-5 flex flex-col justify-center items-center">
+                <div className="flex justify-center items-center gap-2 border-b border-dashed border-zinc-300 pb-3">
+                  {isEditing ? (
+                    <input
+                      {...register("quotationTitle")}
+                      autoFocus
+                      onBlur={() => setIsEditing(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          setIsEditing(false);
+                        }
+                      }}
+                      placeholder="Quotation title..."
+                      className="flex-1 border-0 bg-transparent p-0 text-2xl font-bold text-zinc-950 shadow-none outline-none placeholder:text-zinc-300"
+                    />
+                  ) : (
+                    <h2
+                      onClick={() => setIsEditing(true)}
+                      className="flex-1 cursor-text text-2xl font-bold text-zinc-950"
+                    >
+                      {title || "Quotation"}
+                    </h2>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="flex-shrink-0 text-zinc-400 hover:text-[#7438dc] transition-colors"
+                  >
+                    <Pen className="size-4" />
+                  </button>
+                </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Subtitle inline */}
+                <div className="pt-3">
+                  {showSubtitle ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        {...register("subtitle")}
+                        placeholder="Add subtitle..."
+                        className="flex-1 border-0 bg-transparent p-0 text-sm text-zinc-500 shadow-none outline-none placeholder:text-zinc-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSubtitle(false);
+                          setValue("subtitle", "");
+                        }}
+                        className="text-zinc-400 hover:text-red-500"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowSubtitle(true)}
+                      className="flex items-center gap-1.5 text-sm text-[#7438dc] hover:underline"
+                    >
+                      <Plus className="size-3.5" />
+                      Add Subtitle
+                      <Gem className="size-3.5 text-orange-400" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Quotation No */}
                 <div>
                   <label className={labelCls}>Quotation No.</label>
@@ -626,26 +686,6 @@ export function QuotationForm({
                   />
                 </div>
               </div>
-
-              {/* Subtitle */}
-              {showSubtitle ? (
-                <div className="mt-3">
-                  <label className={labelCls}>Subtitle</label>
-                  <input
-                    {...register("subtitle")}
-                    placeholder="Subtitle…"
-                    className={inputCls}
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowSubtitle(true)}
-                  className="mt-3 flex items-center gap-1 text-sm text-[#7438dc] hover:underline"
-                >
-                  <Plus className="size-3.5" /> Add Subtitle
-                </button>
-              )}
 
               {/* Custom fields */}
               {showCustomFields && (

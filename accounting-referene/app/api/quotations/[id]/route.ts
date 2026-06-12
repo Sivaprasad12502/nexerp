@@ -86,7 +86,8 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
     const quotation = await prisma.quotation.update({
       where: { id },
       data: {
-        ...(data.quotationNumber !== undefined && { quotationNumber: data.quotationNumber || existing.quotationNumber }),
+        ...(data.quotationTitle !== undefined && { quotationTitle: data.quotationTitle || null }),
+      ...(data.quotationNumber !== undefined && { quotationNumber: data.quotationNumber || existing.quotationNumber }),
         ...(data.quotationDate !== undefined && { quotationDate: data.quotationDate ? new Date(data.quotationDate) : existing.quotationDate }),
         ...(data.validTillDate !== undefined && { validTillDate: data.validTillDate ? new Date(data.validTillDate) : null }),
         ...(data.subtitle !== undefined && { subtitle: data.subtitle || null }),
