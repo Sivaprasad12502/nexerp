@@ -23,7 +23,8 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type QuotationStatus = "DRAFT" | "SAVED" | "CANCELLED";
+type QuotationStatus =
+  | "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 type QuotationListItem = {
   id: string;
@@ -34,6 +35,11 @@ type QuotationListItem = {
   totalAmount: number;
   status: QuotationStatus;
   clientName: string | null;
+  sentAt: string | null;
+  viewedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
   client: { id: string; businessName: string; logo: string | null } | null;
 };
 
@@ -50,13 +56,21 @@ function fmt(date: string | null | undefined) {
 
 function StatusBadge({ status }: { status: QuotationStatus }) {
   const map: Record<QuotationStatus, string> = {
-    DRAFT: "bg-zinc-100 text-zinc-600",
-    SAVED: "bg-green-50 text-green-700 ring-1 ring-green-200",
-    CANCELLED: "bg-red-50 text-red-600 ring-1 ring-red-200",
+    DRAFT:     "bg-zinc-100 text-zinc-600",
+    SAVED:     "bg-green-50 text-green-700 ring-1 ring-green-200",
+    SENT:      "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+    VIEWED:    "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
+    APPROVED:  "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    REJECTED:  "bg-red-50 text-red-600 ring-1 ring-red-200",
+    CANCELLED: "bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200",
   };
   const label: Record<QuotationStatus, string> = {
-    DRAFT: "Draft",
-    SAVED: "Saved",
+    DRAFT:     "Draft",
+    SAVED:     "Saved",
+    SENT:      "Sent",
+    VIEWED:    "Viewed",
+    APPROVED:  "Approved",
+    REJECTED:  "Rejected",
     CANCELLED: "Cancelled",
   };
   return (
@@ -71,6 +85,16 @@ function StatusBadge({ status }: { status: QuotationStatus }) {
 export default function QuotationEstimatesPage() {
   const router = useRouter();
   const qc = useQueryClient();
+
+  const ALL_TABS: { value: QuotationStatus; label: string }[] = [
+    { value: "DRAFT",     label: "Drafts" },
+    { value: "SAVED",     label: "Saved" },
+    { value: "SENT",      label: "Sent" },
+    { value: "VIEWED",    label: "Viewed" },
+    { value: "APPROVED",  label: "Approved" },
+    { value: "REJECTED",  label: "Rejected" },
+    { value: "CANCELLED", label: "Cancelled" },
+  ];
 
   const [tab, setTab] = useState<QuotationStatus>("DRAFT");
   const [search, setSearch] = useState("");
@@ -131,19 +155,19 @@ export default function QuotationEstimatesPage() {
         </div>
 
         {/* Status tabs */}
-        <div className="flex gap-0">
-          {(["DRAFT", "SAVED", "CANCELLED"] as QuotationStatus[]).map((s) => (
+        <div className="flex gap-0 overflow-x-auto">
+          {ALL_TABS.map(({ value, label }) => (
             <button
-              key={s}
+              key={value}
               type="button"
-              onClick={() => setTab(s)}
-              className={`mr-6 border-b-2 pb-3 text-sm font-medium transition-colors ${
-                tab === s
+              onClick={() => setTab(value)}
+              className={`mr-5 shrink-0 border-b-2 pb-3 text-sm font-medium transition-colors ${
+                tab === value
                   ? "border-[#6d28d9] text-[#6d28d9]"
                   : "border-transparent text-zinc-500 hover:text-zinc-800"
               }`}
             >
-              {s === "DRAFT" ? "Drafts" : s === "SAVED" ? "Saved" : "Cancelled"}
+              {label}
             </button>
           ))}
         </div>
@@ -212,19 +236,34 @@ export default function QuotationEstimatesPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">
                       Status
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">
+                      Activity Date
+                    </th>
                     <th className="w-10 px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
-                  {quotations.map((q) => (
+                  {quotations.map((q) => {
+                    // For sent/viewed/approved/rejected navigate to view page, else edit
+                    const rowHref = (["SENT","VIEWED","APPROVED","REJECTED"] as QuotationStatus[]).includes(q.status)
+                      ? `/sales-and-invoices/quotation-estimates/${q.id}`
+                      : `/sales-and-invoices/quotation-estimates/${q.id}/edit`;
+
+                    // Show the most recent activity date
+                    const activityDate =
+                      q.approvedAt ?? q.rejectedAt ?? q.viewedAt ?? q.sentAt;
+                    const activityLabel: Partial<Record<QuotationStatus, string>> = {
+                      SENT:     "Sent",
+                      VIEWED:   "Viewed",
+                      APPROVED: "Approved",
+                      REJECTED: "Rejected",
+                    };
+
+                    return (
                     <tr
                       key={q.id}
                       className="cursor-pointer hover:bg-zinc-50/80"
-                      onClick={() =>
-                        router.push(
-                          `/sales-and-invoices/quotation-estimates/${q.id}/edit`,
-                        )
-                      }
+                      onClick={() => router.push(rowHref)}
                     >
                       <td className="px-4 py-3 font-medium text-zinc-900">
                         {q.quotationNumber}
@@ -243,6 +282,14 @@ export default function QuotationEstimatesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={q.status} />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-zinc-500 text-xs">
+                        {activityDate ? (
+                          <>
+                            <span className="text-zinc-400">{activityLabel[q.status] ?? ""} </span>
+                            {fmt(activityDate)}
+                          </>
+                        ) : "—"}
                       </td>
                       <td
                         className="px-4 py-3"
@@ -295,7 +342,8 @@ export default function QuotationEstimatesPage() {
                         </DropdownMenu>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>

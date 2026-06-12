@@ -53,6 +53,7 @@ const items: NavItem[] = [
     icon: FileText,
     children: [
       { label: "Clients & Prospects", href: "/sales-and-invoices/clients-prospects" },
+      { label: "Connected Customers", href: "/sales-and-invoices/connected-customers" },
       { label: "Quotation & Estimates", href: "/sales-and-invoices/quotation-estimates" },
       { label: "Proforma Invoices", href: "/sales/proforma-invoices" },
       { label: "Invoices", href: "/sales/invoices" },

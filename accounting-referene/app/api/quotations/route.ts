@@ -27,15 +27,18 @@ export async function GET(req: NextRequest) {
   const ctx = await getRbacContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const status = (req.nextUrl.searchParams.get("status") ?? "DRAFT").toUpperCase();
-  const resolvedStatus =
-    status === "SAVED" ? "SAVED" : status === "CANCELLED" ? "CANCELLED" : "DRAFT";
+  const VALID_STATUSES = ["DRAFT", "SAVED", "SENT", "VIEWED", "APPROVED", "REJECTED", "CANCELLED"] as const;
+  type QStatus = (typeof VALID_STATUSES)[number];
+  const rawStatus = (req.nextUrl.searchParams.get("status") ?? "DRAFT").toUpperCase();
+  const resolvedStatus: QStatus = (VALID_STATUSES as readonly string[]).includes(rawStatus)
+    ? (rawStatus as QStatus)
+    : "DRAFT";
   const search = req.nextUrl.searchParams.get("search")?.trim() ?? "";
 
   const quotations = await prisma.quotation.findMany({
     where: {
       businessId: ctx.businessId,
-      status: resolvedStatus as "DRAFT" | "SAVED" | "CANCELLED",
+      status: resolvedStatus,
       ...(search && {
         OR: [
           { quotationNumber: { contains: search, mode: "insensitive" } },
@@ -44,9 +47,21 @@ export async function GET(req: NextRequest) {
       }),
     },
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      quotationNumber: true,
+      quotationDate: true,
+      validTillDate: true,
+      currency: true,
+      totalAmount: true,
+      status: true,
+      clientName: true,
+      sentAt: true,
+      viewedAt: true,
+      approvedAt: true,
+      rejectedAt: true,
+      rejectionReason: true,
       client: { select: { id: true, businessName: true, logo: true } },
-      items: { orderBy: { sortOrder: "asc" } },
     },
   });
 

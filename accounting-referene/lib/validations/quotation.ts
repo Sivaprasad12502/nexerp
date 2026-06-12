@@ -169,10 +169,32 @@ export const quotationCreateSchema = z.object({
   settings: quotationSettingsSchema.optional(),
 
   // Status
-  status: z.enum(["DRAFT", "SAVED", "CANCELLED"]).default("DRAFT"),
+  status: z.enum(["DRAFT", "SAVED", "SENT", "VIEWED", "APPROVED", "REJECTED", "CANCELLED"]).default("DRAFT"),
 });
 
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
 
 export const quotationUpdateSchema = quotationCreateSchema.partial();
 export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;
+
+// ─── Send Quotation ───────────────────────────────────────────────────────────
+
+export const quotationSendSchema = z.object({
+  to:             z.string().trim().email("Valid client email is required"),
+  cc:             z.array(z.string().trim().email()).default([]),
+  replyTo:        z.string().trim().email().optional().or(z.literal("")),
+  subject:        z.string().trim().min(1).max(500),
+  message:        z.string().trim().min(1).max(10000),
+  textType:       z.enum(["rich", "plain"]).default("rich"),
+  getEmailStatus: z.boolean().default(true),
+});
+
+export type QuotationSendInput = z.infer<typeof quotationSendSchema>;
+
+// ─── Reject Quotation ─────────────────────────────────────────────────────────
+
+export const quotationRejectSchema = z.object({
+  rejectionReason: z.string().trim().min(1, "Rejection reason is required").max(2000),
+});
+
+export type QuotationRejectInput = z.infer<typeof quotationRejectSchema>;

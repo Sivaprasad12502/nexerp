@@ -19,8 +19,10 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  business      Business?
-  memberships   Membership[]
+  business             Business?
+  memberships          Membership[]
+  approvedQuotations   Quotation[]          @relation("QuotationApprover")
+  quotationActivities  QuotationActivity[]
 }
 
 model Business {
@@ -51,6 +53,11 @@ model Business {
   warehouses  Warehouse[]
   products    Product[]
   quotations  Quotation[]
+
+  // Vendor & relationship back-relations
+  vendors             Vendor[]               @relation("BusinessVendors")
+  buyerRelationships  BusinessRelationship[] @relation("BuyerRelationships")
+  sellerRelationships BusinessRelationship[] @relation("SellerRelationships")
 
   businessSettings BusinessSettings?
 }
@@ -439,7 +446,18 @@ model StockAdjustment {
 enum QuotationStatus {
   DRAFT
   SAVED
+  SENT
+  VIEWED
+  APPROVED
+  REJECTED
   CANCELLED
+}
+
+enum QuotationActivityAction {
+  QUOTATION_SENT
+  QUOTATION_VIEWED
+  QUOTATION_APPROVED
+  QUOTATION_REJECTED
 }
 
 model Quotation {
@@ -511,9 +529,37 @@ model Quotation {
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
-  items QuotationItem[]
+  // Approval workflow
+  approvalToken     String?   @unique
+  sentAt            DateTime?
+  viewedAt          DateTime?
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  approvedByUserId  String?
+  approvedByUser    User?     @relation("QuotationApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  // Business relationship (set when quotation is approved)
+  businessRelationshipId String?
+  businessRelationship   BusinessRelationship? @relation(fields: [businessRelationshipId], references: [id], onDelete: SetNull)
+
+  items      QuotationItem[]
+  activities QuotationActivity[]
 
   @@index([businessId, status])
+}
+
+model QuotationActivity {
+  id          String                  @id @default(cuid())
+  quotationId String
+  quotation   Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  action      QuotationActivityAction
+  userId      String?                 // null for anonymous public views (e.g. VIEWED)
+  user        User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  metadata    Json                    @default("{}")
+  createdAt   DateTime                @default(now())
+
+  @@index([quotationId])
 }
 
 model QuotationItem {
@@ -541,4 +587,61 @@ model QuotationItem {
   amount    Float @default(0)
   total     Float @default(0)
   sortOrder Int   @default(0)
+}
+
+// ─── Vendors & Business Relationships ────────────────────────────────────────
+
+enum VendorStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum BusinessRelationshipStatus {
+  ACTIVE
+  BLOCKED
+}
+
+/// A supplier/vendor stored in the buyer's business. Populated automatically when a
+/// quotation from the seller is approved, or added manually.
+model Vendor {
+  id               String       @id @default(cuid())
+  businessId       String                            // BUYER's business (tenant scope)
+  business         Business     @relation("BusinessVendors", fields: [businessId], references: [id], onDelete: Cascade)
+  linkedBusinessId String?                           // SELLER's business id; null for manually-added vendors
+
+  name      String
+  email     String?
+  phone     String?
+  website   String?
+  address   String?
+  gstNumber String?
+
+  status    VendorStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  // NULL values are distinct in PG, so manual vendors (linkedBusinessId = NULL) don't collide with each other
+  @@unique([businessId, linkedBusinessId])
+  @@index([businessId, status])
+}
+
+/// Persistent link between a buyer business and a seller business, created when the first
+/// quotation from the seller is approved. Serves as the spine for future transaction history.
+model BusinessRelationship {
+  id               String                     @id @default(cuid())
+  buyerBusinessId  String
+  buyerBusiness    Business                   @relation("BuyerRelationships", fields: [buyerBusinessId], references: [id], onDelete: Cascade)
+  sellerBusinessId String
+  sellerBusiness   Business                   @relation("SellerRelationships", fields: [sellerBusinessId], references: [id], onDelete: Cascade)
+
+  status BusinessRelationshipStatus @default(ACTIVE)
+
+  // Transaction history — quotations already linked; POs / invoices / payments added in future phases
+  quotations Quotation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([buyerBusinessId, sellerBusinessId])
+  @@index([sellerBusinessId])
 }

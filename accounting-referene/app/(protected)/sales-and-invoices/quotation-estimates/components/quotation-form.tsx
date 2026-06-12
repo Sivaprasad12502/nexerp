@@ -112,7 +112,7 @@ export type QuotationRow = {
   attachments: string[];
   customFields: { label: string; value: string }[];
   settings: QuotationSettings;
-  status: "DRAFT" | "SAVED" | "CANCELLED";
+  status: "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "APPROVED" | "REJECTED" | "CANCELLED";
   items: {
     id: string;
     productId: string | null;

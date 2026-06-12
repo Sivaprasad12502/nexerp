@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,8 +12,13 @@ import { GoogleIcon } from "@/components/auth/google-icon";
 import { loginSchema, type LoginInput } from "@/lib/validations/login";
 import { toast } from "sonner";
 
-const Login = () => {
+// ─── Inner component reads searchParams (must be inside <Suspense> in Next 16) ─
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/business-new";
+
   const [showPassword, setShowPassword] = useState(false);
 
   const {
@@ -39,9 +44,8 @@ const Login = () => {
       return;
     }
 
-    // Proxy will redirect to /dashboard if user has a business; otherwise stays on /business-new
-    toast.success("Logged in successfully!")
-    router.push("/business-new");
+    toast.success("Logged in successfully!");
+    router.push(callbackUrl);
     router.refresh();
   };
 
@@ -53,7 +57,7 @@ const Login = () => {
 
       <button
         type="button"
-        onClick={() => signIn("google", { callbackUrl: "/business-new" })}
+        onClick={() => signIn("google", { callbackUrl })}
         className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
       >
         <GoogleIcon className="size-5" />
@@ -154,6 +158,14 @@ const Login = () => {
       </p>
     </div>
   );
-};
+}
+
+// ─── Page export — wraps in Suspense (required for useSearchParams in Next 16) ─
+
+const Login = () => (
+  <Suspense fallback={<div className="flex min-h-screen items-center justify-center" />}>
+    <LoginForm />
+  </Suspense>
+);
 
 export default Login;

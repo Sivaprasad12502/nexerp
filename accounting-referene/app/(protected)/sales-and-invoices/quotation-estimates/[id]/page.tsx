@@ -10,6 +10,13 @@ import {
   Printer,
   Plus,
   ArrowLeft,
+  LinkIcon,
+  MessageCircle,
+  Mail,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Send,
 } from "lucide-react";
 
 import { type QuotationRow } from "../components/quotation-form";
@@ -19,54 +26,143 @@ import {
 } from "../components/quotation-preview";
 import { QuotationSettingsPanel } from "../components/quotation-settings-panel";
 import type { QuotationSettings } from "@/lib/validations/quotation";
+import { ActionMenu } from "../../clients-prospects/components/action-menu";
+import { EmailQuotationSheet } from "../components/email-quotation-sheet";
+import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 
 // ─── Status badge ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: "DRAFT" | "SAVED" | "CANCELLED" }) {
-  const map = {
-    DRAFT: "bg-amber-100 text-amber-700",
-    SAVED: "bg-green-100 text-green-700",
+type QuotationStatus =
+  | "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+function StatusBadge({ status }: { status: QuotationStatus }) {
+  const map: Record<QuotationStatus, string> = {
+    DRAFT:     "bg-amber-100 text-amber-700",
+    SAVED:     "bg-green-100 text-green-700",
+    SENT:      "bg-blue-100 text-blue-700",
+    VIEWED:    "bg-sky-100 text-sky-700",
+    APPROVED:  "bg-emerald-100 text-emerald-700",
+    REJECTED:  "bg-red-100 text-red-600",
     CANCELLED: "bg-zinc-100 text-zinc-500",
+  };
+  const label: Record<QuotationStatus, string> = {
+    DRAFT:     "Draft",
+    SAVED:     "Created",
+    SENT:      "Sent",
+    VIEWED:    "Viewed",
+    APPROVED:  "Approved",
+    REJECTED:  "Rejected",
+    CANCELLED: "Cancelled",
   };
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${map[status]}`}
     >
-      {status === "SAVED"
-        ? "Created"
-        : status.charAt(0) + status.slice(1).toLowerCase()}
+      {label[status]}
     </span>
+  );
+}
+
+// ─── Approval timeline ────────────────────────────────────────────────────────
+
+function fmtDate(date: string | null | undefined) {
+  if (!date) return "";
+  return new Date(date).toLocaleDateString("en-AE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+type TimelineQuotation = QuotationRow & {
+  sentAt?: string | null;
+  viewedAt?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+};
+
+function ApprovalTimeline({ quotation: q }: { quotation: TimelineQuotation }) {
+  return (
+    <div className="mb-5 rounded-xl border border-zinc-200 bg-white px-5 py-4">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+        Approval Timeline
+      </h3>
+      <div className="space-y-2.5">
+        {q.sentAt && (
+          <div className="flex items-center gap-2.5 text-sm">
+            <Send className="size-4 shrink-0 text-blue-500" />
+            <span className="font-medium text-zinc-700">Sent</span>
+            <span className="text-zinc-400">{fmtDate(q.sentAt)}</span>
+          </div>
+        )}
+        {q.viewedAt && (
+          <div className="flex items-center gap-2.5 text-sm">
+            <Eye className="size-4 shrink-0 text-sky-500" />
+            <span className="font-medium text-zinc-700">Viewed by client</span>
+            <span className="text-zinc-400">{fmtDate(q.viewedAt)}</span>
+          </div>
+        )}
+        {q.approvedAt && (
+          <div className="flex items-center gap-2.5 text-sm">
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+            <span className="font-medium text-zinc-700">Approved</span>
+            <span className="text-zinc-400">{fmtDate(q.approvedAt)}</span>
+          </div>
+        )}
+        {q.rejectedAt && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 text-sm">
+              <XCircle className="size-4 shrink-0 text-red-500" />
+              <span className="font-medium text-zinc-700">Rejected</span>
+              <span className="text-zinc-400">{fmtDate(q.rejectedAt)}</span>
+            </div>
+            {q.rejectionReason && (
+              <p className="ml-6 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                {q.rejectionReason}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
 // ─── Default settings when a quotation has none yet ───────────────────────────
 
-const DEFAULT_SETTINGS: QuotationSettings = {
-  displayUnitAs: "mergeWithQuantity",
-  showTaxSummary: false,
-  hideCountryOfSupply: false,
-  addOriginalImages: false,
-  showThumbnails: false,
-  showFullWidthDescription: false,
-  hideSubtotalForGroups: false,
-  showSku: false,
-  showSerialNumbers: false,
-  showBatchDetails: false,
-  showHsnSummary: false,
-  template: "professional",
-  themeColor: "#7438dc",
-  fontFamily: "inter",
-  pageSize: "A4",
-  margin: "normal",
-  numberFormat: "en-IN",
-  showLetterhead: false,
-  showFooter: false,
-  showWatermark: false,
-  watermarkOpacity: 0.15,
-  showBankDetails: false,
-  showUpiDetails: false,
-  showBatchSummary: false,
-};
+const DEFAULT_SETTINGS = DEFAULT_QUOTATION_SETTINGS;
+
+const moreActions = [
+  {
+    label: "Create New Quotation",
+    onClick: () => console.log("create"),
+  },
+  {
+    label: "Send Via Email",
+    onClick: () => console.log("create"),
+  },
+  {
+    label: "Send Reminder by WhatsApp",
+    onClick: () => console.log("whatsapp"),
+  },
+  {
+    label: "Send Reminder by Email",
+    onClick: () => console.log("email"),
+  },
+  {
+    label: "Cancel Quotation",
+    onClick: () => console.log("cancel"),
+  },
+  {
+    label: "Convert to Invoice",
+    onClick: () => console.log("convert"),
+  },
+  {
+    label: "Delete Quotation",
+    onClick: () => console.log("delete"),
+  },
+];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -101,6 +197,26 @@ export default function QuotationViewPage({
   const [localSettings, setLocalSettings] =
     useState<QuotationSettings>(DEFAULT_SETTINGS);
   const [localBs, setLocalBs] = useState<BusinessSettingsRow>({});
+  const [emailSheetOpen, setEmailSheetOpen] = useState(false)
+
+
+  const shareActions = [
+  {
+    label: "Send Email",
+    icon: <Mail className="size-4" />,
+    onClick: () => setEmailSheetOpen(true),
+  },
+  {
+    label: "Send WhatsApp",
+    icon: <MessageCircle className="size-4 text-green-500" />,
+    onClick: () => console.log("whatsapp"),
+  },
+  {
+    label: "Copy Link",
+    icon: <LinkIcon className="size-4" />,
+    onClick: () => console.log("copy"),
+  },
+];
 
   // Seed once quotation and business settings arrive
   const settingsSeeded = useRef(false);
@@ -274,7 +390,7 @@ export default function QuotationViewPage({
               onClick={() =>
                 router.push("/sales-and-invoices/quotation-estimates/new")
               }
-              className="flex items-center gap-1.5 rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-[#6330c2] transition-colors"
+              className="flex items-center gap-1.5 rounded-lg bg-[#e6007b] px-3 py-2 text-sm font-medium text-white hover:bg-[#6330c2] transition-colors"
             >
               <Plus className="size-4" />
               <span className="hidden sm:inline">Create New Quotation</span>
@@ -290,14 +406,14 @@ export default function QuotationViewPage({
           <div className="flex-1 overflow-auto">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                 <button
+                <button
                   type="button"
                   onClick={() =>
                     router.push(
                       `/sales-and-invoices/quotation-estimates/${id}/edit`,
                     )
                   }
-                  className="flex items-center gap-1.5 rounded-lg border border-[#7438dc] px-3 py-2 text-sm font-medium text-[#7438dc] hover:bg-[#7438dc]/5 transition-colors"
+                  className="flex flex-col items-center gap-1.5 rounded-lg border border-[#7438dc] px-3 py-2 text-sm font-medium text-[#7438dc] hover:bg-[#7438dc]/5 transition-colors"
                 >
                   <Pencil className="size-4" />
                   Edit
@@ -307,7 +423,7 @@ export default function QuotationViewPage({
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  className="flex  flex-col items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
                 >
                   <Printer className="size-4" />
                   <span className="hidden sm:inline">Print / PDF</span>
@@ -315,30 +431,48 @@ export default function QuotationViewPage({
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  className="flex flex-col items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
                 >
                   <Printer className="size-4" />
                   <span className="hidden sm:inline">Download</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
-                >
-                  <Printer className="size-4" />
-                  <span className="hidden sm:inline">Email / What's App</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
-                >
-                  <Printer className="size-4" />
-                  <span className="hidden sm:inline">More</span>
-                </button>
-               
+                <ActionMenu
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex flex-col items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                    >
+                      <Printer className="size-4" />
+                      <span className="hidden sm:inline">Email / WhatsApp</span>
+                    </button>
+                  }
+                  items={shareActions}
+                />
+                <ActionMenu
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex flex-col items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                    >
+                      <Printer className="size-4" />
+                      <span className="hidden sm:inline">More</span>
+                    </button>
+                  }
+                  items={moreActions}
+                />
               </div>
             </div>
+            {/* ── Approval timeline (shown once quotation is sent) ── */}
+            {(["SENT","VIEWED","APPROVED","REJECTED"] as QuotationStatus[]).includes(quotation.status as QuotationStatus) && (
+              <ApprovalTimeline quotation={quotation as (QuotationRow & {
+                sentAt?: string | null;
+                viewedAt?: string | null;
+                approvedAt?: string | null;
+                rejectedAt?: string | null;
+                rejectionReason?: string | null;
+              })} />
+            )}
+
             <QuotationPreview
               quotation={quotation}
               businessSettings={localBs}
@@ -355,6 +489,13 @@ export default function QuotationViewPage({
               onBusinessSettingsChange={handleBsChange}
             />
           </div>
+          <EmailQuotationSheet
+            open={emailSheetOpen}
+            onOpenChange={setEmailSheetOpen}
+            quotation={quotation}
+            quotationId={id}
+            clientEmail={(quotationData?.quotation as (QuotationRow & { client?: { email?: string | null } | null }))?.client?.email}
+          />
         </div>
       </div>
     </div>
