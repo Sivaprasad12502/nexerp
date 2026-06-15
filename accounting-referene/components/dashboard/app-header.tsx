@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, CircleHelp, Gift, LayoutGrid, Menu, Search } from "lucide-react";
+import { CircleHelp, Gift, LayoutGrid, Menu, Search } from "lucide-react";
 import { UserMenu } from "./user-menu";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   return (
@@ -45,9 +46,7 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
         <HeaderIcon label="What's new">
           <Gift className="size-5" />
         </HeaderIcon>
-        <HeaderIcon label="Notifications">
-          <Bell className="size-5" />
-        </HeaderIcon>
+        <NotificationBell />
         <HeaderIcon label="Help">
           <CircleHelp className="size-5" />
         </HeaderIcon>

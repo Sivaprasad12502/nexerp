@@ -23,6 +23,9 @@ model User {
   memberships          Membership[]
   approvedQuotations   Quotation[]          @relation("QuotationApprover")
   quotationActivities  QuotationActivity[]
+  notifications        Notification[]
+  documents            Document[]           @relation("DocumentCreator")
+  documentConversions  DocumentConversion[] @relation("ConversionCreator")
 }
 
 model Business {
@@ -58,6 +61,10 @@ model Business {
   vendors             Vendor[]               @relation("BusinessVendors")
   buyerRelationships  BusinessRelationship[] @relation("BuyerRelationships")
   sellerRelationships BusinessRelationship[] @relation("SellerRelationships")
+
+  // Document & conversion back-relations
+  documents           Document[]
+  documentConversions DocumentConversion[]
 
   businessSettings BusinessSettings?
 }
@@ -217,6 +224,7 @@ model Client {
 
   linkedContacts ClientContact[]
   quotations     Quotation[]
+  documents      Document[]
 
   @@index([businessId, status])
 }
@@ -402,6 +410,7 @@ model Product {
   stockLevels     WarehouseStock[]
   adjustments     StockAdjustment[]
   quotationItems  QuotationItem[]
+  documentItems   DocumentItem[]
 
   @@index([businessId, status])
 }
@@ -451,6 +460,7 @@ enum QuotationStatus {
   APPROVED
   REJECTED
   CANCELLED
+  PURCHASE_ORDER_CREATED
 }
 
 enum QuotationActivityAction {
@@ -458,6 +468,7 @@ enum QuotationActivityAction {
   QUOTATION_VIEWED
   QUOTATION_APPROVED
   QUOTATION_REJECTED
+  QUOTATION_PO_CREATED
 }
 
 model Quotation {
@@ -533,9 +544,10 @@ model Quotation {
   approvalToken     String?   @unique
   sentAt            DateTime?
   viewedAt          DateTime?
-  approvedAt        DateTime?
-  rejectedAt        DateTime?
-  rejectionReason   String?
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  purchaseOrderCreatedAt  DateTime?
+  rejectionReason         String?
   approvedByUserId  String?
   approvedByUser    User?     @relation("QuotationApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
@@ -644,4 +656,174 @@ model BusinessRelationship {
 
   @@unique([buyerBusinessId, sellerBusinessId])
   @@index([sellerBusinessId])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  QUOTATION_SENT
+  QUOTATION_VIEWED
+  QUOTATION_APPROVED
+  QUOTATION_REJECTED
+  VENDOR_LINKED
+  PURCHASE_ORDER_RECEIVED // reserved — Phase 4/5
+  INVOICE_RECEIVED        // reserved — Phase 4/5
+  PAYMENT_RECEIVED        // reserved — Phase 4/5
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  type       NotificationType
+  isRead     Boolean          @default(false)
+  entityType String?          // e.g. "QUOTATION", "VENDOR"
+  entityId   String?          // the relevant document id for deep-linking
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+// ─── Documents (unified conversion target) ────────────────────────────────────
+
+enum DocumentType {
+  INVOICE
+  PURCHASE_ORDER
+  SALES_ORDER
+  PROFORMA_INVOICE
+  DELIVERY_CHALLAN
+}
+
+enum DocumentStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  type           DocumentType
+  documentNumber String
+  documentDate   DateTime     @default(now())
+  validTillDate  DateTime?
+  title          String?
+  subtitle       String?
+  logo           String?
+  currency       String       @default("AED")
+
+  // From (business snapshot)
+  fromName    String?
+  fromAddress String?
+  fromGstin   String?
+  fromPan     String?
+
+  // Client
+  clientId      String?
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName    String?
+  clientAddress String?
+  clientGstin   String?
+
+  // Shipping & transport
+  shipFromWarehouseId String?
+  shippingName        String?
+  shippingAddress     String?
+  shippingPostalCode  String?
+  shippingState       String?
+  transporterName     String?
+  distance            String?
+  vehicleType         String?
+  vehicleNumber       String?
+  transportDocNumber  String?
+  transactionType     String?
+
+  // Discount & additional charges
+  discountLabel     String?
+  discountAmount    Float @default(0)
+  additionalCharges Json  @default("[]")
+
+  // Totals snapshot
+  subTotal      Float @default(0)
+  totalTax      Float @default(0)
+  totalDiscount Float @default(0)
+  totalQuantity Float @default(0)
+  totalAmount   Float @default(0)
+  amountInWords String?
+
+  // Extras
+  termsAndConditions String?
+  notes              String?
+  signature          String?
+  additionalInfo     String?
+  contactDetails     String?
+  attachments        String[]
+  customFields       Json     @default("[]")
+  settings           Json     @default("{}")
+
+  status          DocumentStatus @default(ISSUED)
+  sentAt          DateTime?
+  purchasedAt     DateTime?
+  approvalToken   String?        @unique
+  createdByUserId String?
+  createdByUser   User?          @relation("DocumentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  items DocumentItem[]
+
+  @@index([businessId, type, status])
+  @@index([businessId, createdAt])
+}
+
+model DocumentItem {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  productId  String?
+  product    Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Snapshot fields — identical to QuotationItem
+  name        String
+  sku         String?
+  hsnSac      String?
+  unit        String?
+  description String?
+  image       String?
+  groupName   String?
+
+  quantity  Float @default(1)
+  rate      Float @default(0)
+  discount  Float @default(0)
+  taxRate   Float @default(0)
+  taxAmount Float @default(0)
+  amount    Float @default(0)
+  total     Float @default(0)
+  sortOrder Int   @default(0)
+}
+
+// ─── Document Conversion Audit ────────────────────────────────────────────────
+
+model DocumentConversion {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  sourceType String // "QUOTATION" today; can hold DocumentType values in future phases
+  sourceId   String
+  targetType String // DocumentType value
+  targetId   String
+
+  createdByUserId String?
+  createdBy       User?    @relation("ConversionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+
+  // One conversion per (source, target type) — prevents duplicate invoices from the same quotation
+  @@unique([sourceType, sourceId, targetType])
+  @@index([businessId, sourceType, sourceId])
 }

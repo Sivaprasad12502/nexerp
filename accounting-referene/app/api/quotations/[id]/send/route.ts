@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
 import { sendQuotationEmail } from "@/lib/mailer";
 import { quotationSendSchema } from "@/lib/validations/quotation";
+import { notifyBusinessOwner, NotificationType } from "@/lib/notifications";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -23,7 +24,11 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   }
 
   // Don't allow resending an already-decided quotation
-  if (existing.status === "APPROVED" || existing.status === "REJECTED") {
+  if (
+    existing.status === "APPROVED" ||
+    existing.status === "REJECTED" ||
+    existing.status === "PURCHASE_ORDER_CREATED"
+  ) {
     return NextResponse.json(
       { error: `Cannot send a quotation that is already ${existing.status.toLowerCase()}` },
       { status: 409 },
@@ -83,6 +88,20 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       },
     },
   });
+
+  // Notify the seller that they sent a quotation (non-blocking)
+  try {
+    const quotationLabel = existing.quotationNumber ?? id;
+    await notifyBusinessOwner(prisma, ctx.businessId, {
+      type: NotificationType.QUOTATION_SENT,
+      title: "Quotation sent",
+      message: `Quotation ${quotationLabel} was sent to ${data.to}.`,
+      entityType: "QUOTATION",
+      entityId: id,
+    });
+  } catch (err: unknown) {
+    console.error("[notifications] QUOTATION_SENT failed (non-fatal)", err);
+  }
 
   return NextResponse.json({ approvalUrl, emailSent }, { status: 200 });
 }

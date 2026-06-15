@@ -157,18 +157,48 @@ const CURRENCIES = [
   "BHD",
 ];
 
+// ─── Save config (optional, backward-compatible) ──────────────────────────────
+// When not supplied, all defaults reproduce the original quotation behaviour.
+
+type SaveConfig = {
+  /** POST endpoint for create. Default: "/api/quotations" */
+  createEndpoint?: string;
+  /** PATCH endpoint factory for edit. Default: (id) => `/api/quotations/${id}` */
+  updateEndpoint?: (id: string) => string;
+  /** React-Query key to invalidate on success. Default: "quotations" */
+  invalidateKey?: string;
+  /** Fallback document title shown in the editable heading. Default: "Quotation" */
+  titleFallback?: string;
+  /** Document type label used in section headings & toasts. Default: "Quotation" */
+  resourceLabel?: string;
+  /** Key on the API response body that holds the saved document. Default: "quotation" */
+  responseKey?: string;
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function QuotationForm({
   initialData,
   onCancel,
   onSaved,
+  config,
 }: {
   initialData?: QuotationRow | null;
   onCancel: () => void;
   onSaved: (id: string) => void;
+  config?: SaveConfig;
 }) {
   const isEdit = !!initialData;
+
+  // Resolved config with defaults that reproduce original quotation behaviour.
+  const cfg = {
+    createEndpoint: config?.createEndpoint ?? "/api/quotations",
+    updateEndpoint: config?.updateEndpoint ?? ((id: string) => `/api/quotations/${id}`),
+    invalidateKey: config?.invalidateKey ?? "quotations",
+    titleFallback: config?.titleFallback ?? "Quotation",
+    resourceLabel: config?.resourceLabel ?? "Quotation",
+    responseKey: config?.responseKey ?? "quotation",
+  };
   const qc = useQueryClient();
 
   // ── State ──
@@ -408,8 +438,8 @@ export function QuotationForm({
   const save = useMutation({
     mutationFn: async (payload: QuotationCreateInput) => {
       const url = isEdit
-        ? `/api/quotations/${initialData!.id}`
-        : "/api/quotations";
+        ? cfg.updateEndpoint(initialData!.id)
+        : cfg.createEndpoint;
       const method = isEdit ? "PATCH" : "POST";
       const res = await fetch(url, {
         method,
@@ -424,9 +454,9 @@ export function QuotationForm({
       return body;
     },
     onSuccess: (body) => {
-      toast.success(isEdit ? "Quotation updated" : "Quotation created");
-      qc.invalidateQueries({ queryKey: ["quotations"] });
-      onSaved(body.quotation.id);
+      toast.success(isEdit ? `${cfg.resourceLabel} updated` : `${cfg.resourceLabel} created`);
+      qc.invalidateQueries({ queryKey: [cfg.invalidateKey] });
+      onSaved(body[cfg.responseKey].id);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -603,7 +633,7 @@ export function QuotationForm({
                           setIsEditing(false);
                         }
                       }}
-                      placeholder="Quotation title..."
+                      placeholder={`${cfg.titleFallback} title...`}
                       className="flex-1 border-0 bg-transparent p-0 text-2xl font-bold text-zinc-950 shadow-none outline-none placeholder:text-zinc-300"
                     />
                   ) : (
@@ -611,7 +641,7 @@ export function QuotationForm({
                       onClick={() => setIsEditing(true)}
                       className="flex-1 cursor-text text-2xl font-bold text-zinc-950"
                     >
-                      {title || "Quotation"}
+                      {title || cfg.titleFallback}
                     </h2>
                   )}
                   <button
@@ -660,16 +690,16 @@ export function QuotationForm({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Quotation No */}
                 <div>
-                  <label className={labelCls}>Quotation No.</label>
+                  <label className={labelCls}>{cfg.resourceLabel} No.</label>
                   <input
                     {...register("quotationNumber")}
-                    placeholder="e.g. QT-0001 (auto)"
+                    placeholder={`e.g. ${cfg.resourceLabel.substring(0,2).toUpperCase()}-0001 (auto)`}
                     className={inputCls}
                   />
                 </div>
                 {/* Quotation Date */}
                 <div>
-                  <label className={labelCls}>Quotation Date</label>
+                  <label className={labelCls}>{cfg.resourceLabel} Date</label>
                   <input
                     {...register("quotationDate")}
                     type="date"
@@ -789,7 +819,7 @@ export function QuotationForm({
           <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-100">
             <div className="flex items-center gap-2 mb-4">
               <Building2 className="size-4 text-zinc-400" />
-              <h3 className="font-medium text-zinc-950">Quotation From</h3>
+              <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} From</h3>
               <span className="text-xs text-zinc-400">(Your Details)</span>
             </div>
             <div className="space-y-3">
@@ -835,7 +865,7 @@ export function QuotationForm({
           <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-100">
             <div className="flex items-center gap-2 mb-4">
               <FileText className="size-4 text-zinc-400" />
-              <h3 className="font-medium text-zinc-950">Quotation For</h3>
+              <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} For</h3>
               <span className="text-xs text-zinc-400">
                 (Client&apos;s Details)
               </span>

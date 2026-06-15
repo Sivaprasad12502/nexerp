@@ -40,7 +40,27 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ quotation });
+  const poConversion = await prisma.documentConversion.findUnique({
+    where: {
+      sourceType_sourceId_targetType: {
+        sourceType: "QUOTATION",
+        sourceId: id,
+        targetType: "PURCHASE_ORDER",
+      },
+    },
+    select: { targetId: true },
+  });
+
+  let convertedPurchaseOrder: { id: string; documentNumber: string } | null = null;
+  if (poConversion) {
+    const doc = await prisma.document.findFirst({
+      where: { id: poConversion.targetId, businessId: ctx.businessId },
+      select: { id: true, documentNumber: true },
+    });
+    if (doc) convertedPurchaseOrder = doc;
+  }
+
+  return NextResponse.json({ quotation, convertedPurchaseOrder });
 }
 
 // ─── PATCH /api/quotations/[id] ───────────────────────────────────────────────

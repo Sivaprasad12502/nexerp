@@ -55,10 +55,11 @@ const items: NavItem[] = [
       { label: "Clients & Prospects", href: "/sales-and-invoices/clients-prospects" },
       { label: "Connected Customers", href: "/sales-and-invoices/connected-customers" },
       { label: "Quotation & Estimates", href: "/sales-and-invoices/quotation-estimates" },
+      { label: "Documents", href: "/sales-and-invoices/documents" },
       { label: "Proforma Invoices", href: "/sales/proforma-invoices" },
       { label: "Invoices", href: "/sales/invoices" },
       { label: "Payment Receipts", href: "/sales/payment-receipts" },
-      { label: "Sales Orders", href: "/sales/sales-orders" },
+      { label: "Sales Orders", href: "/sales-and-invoices/sales-order" },
       { label: "Delivery Challans", href: "/sales/delivery-challans" },
       { label: "Credit Notes", href: "/sales/credit-notes" },
     ],
@@ -68,7 +69,7 @@ const items: NavItem[] = [
     icon: ShoppingCart,
     children: [
       { label: "Vendors", href: "/purchases/vendors" },
-      { label: "Purchase Orders", href: "/purchases/purchase-orders" },
+      { label: "Purchase Orders", href: "/purchases/purchase-order" },
     ],
   },
   {

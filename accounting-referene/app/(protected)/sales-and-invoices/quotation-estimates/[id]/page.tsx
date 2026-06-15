@@ -29,39 +29,10 @@ import type { QuotationSettings } from "@/lib/validations/quotation";
 import { ActionMenu } from "../../clients-prospects/components/action-menu";
 import { EmailQuotationSheet } from "../components/email-quotation-sheet";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
-
-// ─── Status badge ──────────────────────────────────────────────────────────────
-
-type QuotationStatus =
-  | "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "APPROVED" | "REJECTED" | "CANCELLED";
-
-function StatusBadge({ status }: { status: QuotationStatus }) {
-  const map: Record<QuotationStatus, string> = {
-    DRAFT:     "bg-amber-100 text-amber-700",
-    SAVED:     "bg-green-100 text-green-700",
-    SENT:      "bg-blue-100 text-blue-700",
-    VIEWED:    "bg-sky-100 text-sky-700",
-    APPROVED:  "bg-emerald-100 text-emerald-700",
-    REJECTED:  "bg-red-100 text-red-600",
-    CANCELLED: "bg-zinc-100 text-zinc-500",
-  };
-  const label: Record<QuotationStatus, string> = {
-    DRAFT:     "Draft",
-    SAVED:     "Created",
-    SENT:      "Sent",
-    VIEWED:    "Viewed",
-    APPROVED:  "Approved",
-    REJECTED:  "Rejected",
-    CANCELLED: "Cancelled",
-  };
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${map[status]}`}
-    >
-      {label[status]}
-    </span>
-  );
-}
+import { useConvertQuotation } from "@/lib/hooks/use-documents";
+import { DOCUMENT_TYPE_LABEL, DOCUMENT_TYPES, type DocumentTypeValue } from "@/lib/validations/document";
+import { QuotationStatusBadge } from "@/components/quotations/quotation-status-badge";
+import Link from "next/link";
 
 // ─── Approval timeline ────────────────────────────────────────────────────────
 
@@ -79,10 +50,17 @@ type TimelineQuotation = QuotationRow & {
   viewedAt?: string | null;
   approvedAt?: string | null;
   rejectedAt?: string | null;
+  purchaseOrderCreatedAt?: string | null;
   rejectionReason?: string | null;
 };
 
-function ApprovalTimeline({ quotation: q }: { quotation: TimelineQuotation }) {
+function ApprovalTimeline({
+  quotation: q,
+  convertedPurchaseOrder,
+}: {
+  quotation: TimelineQuotation;
+  convertedPurchaseOrder?: { id: string; documentNumber: string } | null;
+}) {
   return (
     <div className="mb-5 rounded-xl border border-zinc-200 bg-white px-5 py-4">
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
@@ -108,6 +86,21 @@ function ApprovalTimeline({ quotation: q }: { quotation: TimelineQuotation }) {
             <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
             <span className="font-medium text-zinc-700">Approved</span>
             <span className="text-zinc-400">{fmtDate(q.approvedAt)}</span>
+          </div>
+        )}
+        {q.purchaseOrderCreatedAt && (
+          <div className="flex items-center gap-2.5 text-sm">
+            <CheckCircle2 className="size-4 shrink-0 text-purple-500" />
+            <span className="font-medium text-zinc-700">Purchase Order Created</span>
+            <span className="text-zinc-400">{fmtDate(q.purchaseOrderCreatedAt)}</span>
+            {convertedPurchaseOrder && (
+              <Link
+                href={`/sales-and-invoices/documents/${convertedPurchaseOrder.id}`}
+                className="text-xs font-medium text-[#7438dc] hover:underline"
+              >
+                #{convertedPurchaseOrder.documentNumber}
+              </Link>
+            )}
           </div>
         )}
         {q.rejectedAt && (
@@ -155,10 +148,6 @@ const moreActions = [
     onClick: () => console.log("cancel"),
   },
   {
-    label: "Convert to Invoice",
-    onClick: () => console.log("convert"),
-  },
-  {
     label: "Delete Quotation",
     onClick: () => console.log("delete"),
   },
@@ -180,7 +169,10 @@ export default function QuotationViewPage({
     data: quotationData,
     isLoading: qLoading,
     isError: qError,
-  } = useQuery<{ quotation: QuotationRow }>({
+  } = useQuery<{
+    quotation: QuotationRow;
+    convertedPurchaseOrder?: { id: string; documentNumber: string } | null;
+  }>({
     queryKey: ["quotations", id],
     queryFn: () => fetch(`/api/quotations/${id}`).then((r) => r.json()),
   });
@@ -194,6 +186,7 @@ export default function QuotationViewPage({
 
   // ── Local settings state (seeded from quotation.settings) ──
   const quotation = quotationData?.quotation ?? null;
+  const convertedPurchaseOrder = quotationData?.convertedPurchaseOrder ?? null;
   const [localSettings, setLocalSettings] =
     useState<QuotationSettings>(DEFAULT_SETTINGS);
   const [localBs, setLocalBs] = useState<BusinessSettingsRow>({});
@@ -237,6 +230,19 @@ export default function QuotationViewPage({
       bsSeeded.current = true;
     }
   }, [bsData]);
+
+  // ── Document conversion ──
+  const convertMutation = useConvertQuotation();
+  function handleConvert(targetType: DocumentTypeValue) {
+    convertMutation.mutate(
+      { quotationId: id, targetType },
+      {
+        onSuccess: (res) => {
+          router.push(`/sales-and-invoices/documents/${res.document.id}`);
+        },
+      },
+    );
+  }
 
   // ── Persist quotation settings (debounced) ──
   const persistSettingsTimer = useRef<ReturnType<typeof setTimeout> | null>(
@@ -380,7 +386,7 @@ export default function QuotationViewPage({
                 {quotation.quotationNumber}
               </span>
             </nav>
-            <StatusBadge status={quotation.status} />
+            <QuotationStatusBadge status={quotation.status} />
           </div>
 
           {/* Actions */}
@@ -460,17 +466,33 @@ export default function QuotationViewPage({
                   }
                   items={moreActions}
                 />
+                {quotation.status === "APPROVED" && (
+                  <ActionMenu
+                    trigger={
+                      <button
+                        type="button"
+                        disabled={convertMutation.isPending}
+                        className="flex flex-col items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="size-4" />
+                        <span className="hidden sm:inline">Convert</span>
+                      </button>
+                    }
+                    items={DOCUMENT_TYPES.map((type) => ({
+                      label: `Convert to ${DOCUMENT_TYPE_LABEL[type]}`,
+                      onClick: () => handleConvert(type),
+                    }))}
+                    width="w-64"
+                  />
+                )}
               </div>
             </div>
             {/* ── Approval timeline (shown once quotation is sent) ── */}
-            {(["SENT","VIEWED","APPROVED","REJECTED"] as QuotationStatus[]).includes(quotation.status as QuotationStatus) && (
-              <ApprovalTimeline quotation={quotation as (QuotationRow & {
-                sentAt?: string | null;
-                viewedAt?: string | null;
-                approvedAt?: string | null;
-                rejectedAt?: string | null;
-                rejectionReason?: string | null;
-              })} />
+            {(["SENT","VIEWED","APPROVED","REJECTED","PURCHASE_ORDER_CREATED"] as string[]).includes(quotation.status) && (
+              <ApprovalTimeline
+                quotation={quotation as TimelineQuotation}
+                convertedPurchaseOrder={convertedPurchaseOrder}
+              />
             )}
 
             <QuotationPreview

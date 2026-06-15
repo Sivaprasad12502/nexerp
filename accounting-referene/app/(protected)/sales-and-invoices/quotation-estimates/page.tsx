@@ -20,11 +20,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  QuotationStatusBadge,
+  getQuotationActivityLabel,
+} from "@/components/quotations/quotation-status-badge";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type QuotationStatus =
-  | "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "APPROVED" | "REJECTED" | "CANCELLED";
+  | "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "APPROVED" | "REJECTED" | "CANCELLED" | "PURCHASE_ORDER_CREATED";
 
 type QuotationListItem = {
   id: string;
@@ -39,6 +43,7 @@ type QuotationListItem = {
   viewedAt: string | null;
   approvedAt: string | null;
   rejectedAt: string | null;
+  purchaseOrderCreatedAt: string | null;
   rejectionReason: string | null;
   client: { id: string; businessName: string; logo: string | null } | null;
 };
@@ -54,32 +59,6 @@ function fmt(date: string | null | undefined) {
   });
 }
 
-function StatusBadge({ status }: { status: QuotationStatus }) {
-  const map: Record<QuotationStatus, string> = {
-    DRAFT:     "bg-zinc-100 text-zinc-600",
-    SAVED:     "bg-green-50 text-green-700 ring-1 ring-green-200",
-    SENT:      "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    VIEWED:    "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
-    APPROVED:  "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    REJECTED:  "bg-red-50 text-red-600 ring-1 ring-red-200",
-    CANCELLED: "bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200",
-  };
-  const label: Record<QuotationStatus, string> = {
-    DRAFT:     "Draft",
-    SAVED:     "Saved",
-    SENT:      "Sent",
-    VIEWED:    "Viewed",
-    APPROVED:  "Approved",
-    REJECTED:  "Rejected",
-    CANCELLED: "Cancelled",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${map[status]}`}>
-      {label[status]}
-    </span>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function QuotationEstimatesPage() {
@@ -92,6 +71,7 @@ export default function QuotationEstimatesPage() {
     { value: "SENT",      label: "Sent" },
     { value: "VIEWED",    label: "Viewed" },
     { value: "APPROVED",  label: "Approved" },
+    { value: "PURCHASE_ORDER_CREATED", label: "PO Created" },
     { value: "REJECTED",  label: "Rejected" },
     { value: "CANCELLED", label: "Cancelled" },
   ];
@@ -245,19 +225,17 @@ export default function QuotationEstimatesPage() {
                 <tbody className="divide-y divide-zinc-100">
                   {quotations.map((q) => {
                     // For sent/viewed/approved/rejected navigate to view page, else edit
-                    const rowHref = (["SENT","VIEWED","APPROVED","REJECTED"] as QuotationStatus[]).includes(q.status)
+                    const rowHref = (["SENT","VIEWED","APPROVED","REJECTED","PURCHASE_ORDER_CREATED"] as QuotationStatus[]).includes(q.status)
                       ? `/sales-and-invoices/quotation-estimates/${q.id}`
                       : `/sales-and-invoices/quotation-estimates/${q.id}/edit`;
 
-                    // Show the most recent activity date
                     const activityDate =
-                      q.approvedAt ?? q.rejectedAt ?? q.viewedAt ?? q.sentAt;
-                    const activityLabel: Partial<Record<QuotationStatus, string>> = {
-                      SENT:     "Sent",
-                      VIEWED:   "Viewed",
-                      APPROVED: "Approved",
-                      REJECTED: "Rejected",
-                    };
+                      q.purchaseOrderCreatedAt ??
+                      q.approvedAt ??
+                      q.rejectedAt ??
+                      q.viewedAt ??
+                      q.sentAt;
+                    const activityLabel = getQuotationActivityLabel(q.status);
 
                     return (
                     <tr
@@ -281,12 +259,12 @@ export default function QuotationEstimatesPage() {
                         {q.currency} {q.totalAmount.toLocaleString("en-AE", { minimumFractionDigits: 2 })}
                       </td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={q.status} />
+                        <QuotationStatusBadge status={q.status} />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-zinc-500 text-xs">
                         {activityDate ? (
                           <>
-                            <span className="text-zinc-400">{activityLabel[q.status] ?? ""} </span>
+                            <span className="text-zinc-400">{activityLabel ?? ""} </span>
                             {fmt(activityDate)}
                           </>
                         ) : "—"}

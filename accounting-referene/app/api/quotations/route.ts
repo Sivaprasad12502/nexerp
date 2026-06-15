@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const ctx = await getRbacContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const VALID_STATUSES = ["DRAFT", "SAVED", "SENT", "VIEWED", "APPROVED", "REJECTED", "CANCELLED"] as const;
+  const VALID_STATUSES = ["DRAFT", "SAVED", "SENT", "VIEWED", "APPROVED", "REJECTED", "CANCELLED", "PURCHASE_ORDER_CREATED"] as const;
   type QStatus = (typeof VALID_STATUSES)[number];
   const rawStatus = (req.nextUrl.searchParams.get("status") ?? "DRAFT").toUpperCase();
   const resolvedStatus: QStatus = (VALID_STATUSES as readonly string[]).includes(rawStatus)
@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
       viewedAt: true,
       approvedAt: true,
       rejectedAt: true,
+      purchaseOrderCreatedAt: true,
       rejectionReason: true,
       client: { select: { id: true, businessName: true, logo: true } },
     },

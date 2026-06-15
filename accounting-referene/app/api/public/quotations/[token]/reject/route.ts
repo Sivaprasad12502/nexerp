@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { quotationRejectSchema } from "@/lib/validations/quotation";
+import { notifyBusinessOwner, NotificationType } from "@/lib/notifications";
 
 type RouteCtx = { params: Promise<{ token: string }> };
 
@@ -41,7 +42,11 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   }
 
   // Already decided
-  if (quotation.status === "APPROVED" || quotation.status === "REJECTED") {
+  if (
+    quotation.status === "APPROVED" ||
+    quotation.status === "REJECTED" ||
+    quotation.status === "PURCHASE_ORDER_CREATED"
+  ) {
     return NextResponse.json(
       { error: `This quotation has already been ${quotation.status.toLowerCase()}`, status: quotation.status },
       { status: 409 },
@@ -73,6 +78,20 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       metadata: { rejectedByEmail: sessionEmail, rejectionReason },
     },
   });
+
+  // Notify the seller (non-blocking)
+  try {
+    const quotationLabel = quotation.quotationNumber ?? quotation.id;
+    await notifyBusinessOwner(prisma, quotation.businessId, {
+      type:       NotificationType.QUOTATION_REJECTED,
+      title:      "Quotation rejected",
+      message:    `Your quotation ${quotationLabel} was rejected by ${sessionEmail}${rejectionReason ? `: "${rejectionReason}"` : "."}`,
+      entityType: "QUOTATION",
+      entityId:   quotation.id,
+    });
+  } catch (err: unknown) {
+    console.error("[notifications] QUOTATION_REJECTED failed (non-fatal)", err);
+  }
 
   return NextResponse.json({ success: true, status: "REJECTED" });
 }

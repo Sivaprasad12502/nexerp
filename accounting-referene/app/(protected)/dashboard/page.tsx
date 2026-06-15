@@ -7,11 +7,11 @@ import {
   MessageCircle,
   Plus,
   UserRound,
-  UsersRound,
 } from "lucide-react";
 
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { NotificationsWidget } from "@/components/dashboard/notifications-widget";
 
 const gettingStartedCards = [
   {
@@ -235,6 +235,11 @@ export default async function DashboardPage() {
               Book A Demo
             </Link>
           </div>
+        </section>
+
+        {/* Notification activity widget */}
+        <section className="mt-10">
+          <NotificationsWidget />
         </section>
 
         <section className="mt-14">

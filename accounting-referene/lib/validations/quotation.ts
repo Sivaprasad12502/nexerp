@@ -169,7 +169,7 @@ export const quotationCreateSchema = z.object({
   settings: quotationSettingsSchema.optional(),
 
   // Status
-  status: z.enum(["DRAFT", "SAVED", "SENT", "VIEWED", "APPROVED", "REJECTED", "CANCELLED"]).default("DRAFT"),
+  status: z.enum(["DRAFT", "SAVED", "SENT", "VIEWED", "APPROVED", "REJECTED", "CANCELLED", "PURCHASE_ORDER_CREATED"]).default("DRAFT"),
 });
 
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
