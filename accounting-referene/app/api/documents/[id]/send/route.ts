@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   const viewUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}`
     : isInvoice
-      ? `${origin}/sales-and-invoices/documents/${id}`
+      ? `${origin}/invoice/${approvalToken}`
       : "";
   const acceptUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}?action=accept`

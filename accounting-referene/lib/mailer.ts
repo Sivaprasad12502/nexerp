@@ -345,6 +345,65 @@ export async function sendPurchaseOrderEmail(args: PurchaseOrderEmailArgs): Prom
   }
 }
 
+type PaymentApprovalEmailArgs = {
+  to: string;
+  businessName: string;
+  invoiceNumber: string;
+  amount: number;
+  clientName: string;
+  approveUrl: string;
+};
+
+/** Notify the invoice owner that a client recorded a payment needing approval. Never throws. */
+export async function sendPaymentApprovalEmail(args: PaymentApprovalEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, businessName, invoiceNumber, amount, clientName, approveUrl } = args;
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      subject: `Payment received for Invoice ${invoiceNumber} — Review & Approve`,
+      text:
+        `${clientName} has recorded a payment of ${amount} for invoice ${invoiceNumber}.\n\n` +
+        `Review and approve the payment:\n${approveUrl}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            <p style="margin:0 0 8px 0;color:#444">
+              <strong>${clientName}</strong> has recorded a payment of
+              <strong>${amount}</strong> for invoice <strong>${invoiceNumber}</strong>.
+            </p>
+            <p style="margin:0 0 16px 0;color:#666;font-size:13px">
+              Please review the payment details and approve or reject.
+            </p>
+            <div style="margin:24px 0">
+              <a href="${approveUrl}"
+                 style="background:#7438dc;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">
+                Review &amp; Approve Payment
+              </a>
+            </div>
+            <p style="color:#888;font-size:12px">Or paste this link into your browser:<br>
+              <a href="${approveUrl}" style="color:#7438dc">${approveUrl}</a>
+            </p>
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send payment approval email", err);
+    }
+    return false;
+  }
+}
+
 type InvoiceEmailArgs = {
   to: string;
   cc?: string[];

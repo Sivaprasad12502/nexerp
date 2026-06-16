@@ -6,17 +6,18 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  Check,
   ChevronRight,
-  Clock,
-  CreditCard,
+  Check,
   LinkIcon,
   Loader2,
   Mail,
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Plus,
   Printer,
+  CreditCard,
+  Clock,
 } from "lucide-react";
 
 import { useDocument } from "@/lib/hooks/use-documents";
@@ -24,23 +25,24 @@ import { adaptDocumentToQuotationRow } from "@/lib/document-adapter";
 import {
   QuotationPreview,
   type BusinessSettingsRow,
-} from "../../quotation-estimates/components/quotation-preview";
-import { QuotationSettingsPanel } from "../../quotation-estimates/components/quotation-settings-panel";
+} from "../../../sales-and-invoices/quotation-estimates/components/quotation-preview";
+import { QuotationSettingsPanel } from "../../../sales-and-invoices/quotation-estimates/components/quotation-settings-panel";
 import type { QuotationSettings } from "@/lib/validations/quotation";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
-import { ActionMenu } from "../../clients-prospects/components/action-menu";
-import { EmailDocumentSheet } from "../components/email-document-sheet";
-import { DOCUMENT_TYPE_LABEL, type DocumentTypeValue } from "@/lib/validations/document";
+import { ActionMenu } from "../../../sales-and-invoices/clients-prospects/components/action-menu";
+import { EmailDocumentSheet } from "../../../sales-and-invoices/documents/components/email-document-sheet";
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
+const DOCUMENT_LABEL = "Expenditure";
+
+// ─── Status badge ──────────────────────────────────────────────────────────────
 
 function DocumentStatusBadge({ status }: { status: string }) {
   const style =
     status === "ISSUED"
       ? "bg-emerald-100 text-emerald-700"
       : status === "CANCELLED"
-      ? "bg-zinc-100 text-zinc-500"
-      : "bg-amber-100 text-amber-700";
+        ? "bg-zinc-100 text-zinc-500"
+        : "bg-amber-100 text-amber-700";
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}
@@ -50,9 +52,9 @@ function DocumentStatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Page ──────────────────────────────────────────────────────────────────────
 
-export default function DocumentViewPage({
+export default function ExpenditureDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -71,7 +73,7 @@ export default function DocumentViewPage({
     queryFn: () => fetch("/api/business-settings").then((r) => r.json()),
   });
 
-  // ── Local design state (seeded once from the fetched doc) ──
+  // ── Local design state (seeded once) ──
   const [localSettings, setLocalSettings] =
     useState<QuotationSettings>(DEFAULT_QUOTATION_SETTINGS);
   const [localBs, setLocalBs] = useState<BusinessSettingsRow>({});
@@ -148,7 +150,7 @@ export default function DocumentViewPage({
     [persistBs],
   );
 
-  // ── Page-size / margin → @page CSS ──
+  // ── Page size / margin → @page CSS ──
   const pageSizeMap: Record<string, string> = {
     A4: "A4",
     Letter: "letter",
@@ -161,7 +163,7 @@ export default function DocumentViewPage({
     wide: "30mm",
   };
 
-  // ── States ──
+  // ── Loading / error states ──
   if (isLoading || bsLoading) {
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
@@ -173,22 +175,20 @@ export default function DocumentViewPage({
   if (isError || !data?.document) {
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-3 text-zinc-500">
-        <p>Document not found.</p>
+        <p>Expenditure not found.</p>
         <button
           type="button"
-          onClick={() => router.push("/sales-and-invoices/documents")}
+          onClick={() => router.push("/purchases/expenditure")}
           className="text-sm text-[#7438dc] underline"
         >
-          Back to Documents
+          Back to Purchases &amp; Expenses
         </button>
       </div>
     );
   }
 
   const doc = data.document;
-  const typeLabel =
-    DOCUMENT_TYPE_LABEL[doc.type as DocumentTypeValue] ?? doc.type;
-  const adapted = adaptDocumentToQuotationRow(doc, typeLabel);
+  const adapted = adaptDocumentToQuotationRow(doc, DOCUMENT_LABEL);
 
   // ── Share actions ──
   const shareActions = [
@@ -214,13 +214,12 @@ export default function DocumentViewPage({
     { label: "Send Via Email", onClick: () => setEmailSheetOpen(true) },
   ];
 
-  // Client email from DocumentDetail
   const clientEmail =
     (doc as { client?: { email?: string | null } | null })?.client?.email;
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50">
-      {/* Dynamic print-style injection */}
+      {/* Dynamic print styles */}
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -243,11 +242,11 @@ export default function DocumentViewPage({
       {/* ── Top Bar ── */}
       <div className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between">
-          {/* Left: back + breadcrumb + badges */}
+          {/* Left: breadcrumb + step indicator */}
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => router.push("/sales-and-invoices/documents")}
+              onClick={() => router.push("/purchases/expenditure")}
               className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
             >
               <ArrowLeft className="size-4" />
@@ -255,9 +254,9 @@ export default function DocumentViewPage({
             <nav className="flex items-center gap-1 text-sm text-zinc-400">
               <span
                 className="cursor-pointer hover:text-zinc-700"
-                onClick={() => router.push("/sales-and-invoices/documents")}
+                onClick={() => router.push("/purchases/expenditure")}
               >
-                Documents
+                Purchase and Expense
               </span>
               <ChevronRight className="size-3.5" />
               <span className="text-zinc-900 font-medium">
@@ -265,10 +264,20 @@ export default function DocumentViewPage({
               </span>
             </nav>
             <span className="ml-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
-              {typeLabel}
+              {DOCUMENT_LABEL}
             </span>
             <DocumentStatusBadge status={doc.status} />
           </div>
+
+          {/* Right: create button */}
+          <button
+            type="button"
+            onClick={() => router.push("/purchases/expenditure")}
+            className="flex items-center gap-1.5 rounded-md bg-[#e8145a] px-3 py-2 text-sm font-semibold text-white hover:bg-[#c91050] transition-colors"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">+ Create New Purchase and Expense</span>
+          </button>
         </div>
 
         {/* Step indicator */}
@@ -277,18 +286,14 @@ export default function DocumentViewPage({
             <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
               <Check className="size-3" />
             </span>
-            <span className="text-sm font-medium text-zinc-500">
-              Add {typeLabel} Details
-            </span>
+            <span className="text-sm font-medium text-zinc-500">Add Purchase Details</span>
           </div>
           <ChevronRight className="size-4 text-zinc-300" />
           <div className="flex items-center gap-2">
             <span className="flex size-5 items-center justify-center rounded-full bg-[#7438dc] text-xs font-bold text-white">
               2
             </span>
-            <span className="text-sm font-semibold text-zinc-900">
-              Customise &amp; Share
-            </span>
+            <span className="text-sm font-semibold text-zinc-900">Customise &amp; Share</span>
           </div>
         </div>
 
@@ -305,28 +310,25 @@ export default function DocumentViewPage({
             <span>Edit</span>
           </button>
 
-          {/* Payment buttons — only for invoices */}
-          {doc.type === "INVOICE" && (
-            <>
-              <button
-                type="button"
-                onClick={() => toast.info("Record Payment — coming soon")}
-                className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                <CreditCard className="size-4" />
-                <span>Record Payment</span>
-              </button>
+          {/* Record Payment — stub */}
+          <button
+            type="button"
+            onClick={() => toast.info("Record Payment — coming soon")}
+            className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            <CreditCard className="size-4" />
+            <span>Record Payment</span>
+          </button>
 
-              <button
-                type="button"
-                onClick={() => toast.info("Will Pay Later — coming soon")}
-                className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                <Clock className="size-4" />
-                <span>Will Pay Later</span>
-              </button>
-            </>
-          )}
+          {/* Will Pay Later — stub */}
+          <button
+            type="button"
+            onClick={() => toast.info("Will Pay Later — coming soon")}
+            className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            <Clock className="size-4" />
+            <span>Will Pay Later</span>
+          </button>
 
           <div className="mx-1 h-8 w-px bg-zinc-200" />
 
@@ -390,7 +392,7 @@ export default function DocumentViewPage({
                 quotation={adapted}
                 businessSettings={localBs}
                 settings={localSettings}
-                documentLabel={typeLabel}
+                documentLabel={DOCUMENT_LABEL}
               />
             </div>
           </div>
@@ -402,7 +404,7 @@ export default function DocumentViewPage({
               onSettingsChange={handleSettingsChange}
               businessSettings={localBs}
               onBusinessSettingsChange={handleBsChange}
-              documentLabel={typeLabel}
+              documentLabel={DOCUMENT_LABEL}
             />
           </div>
         </div>
@@ -415,7 +417,7 @@ export default function DocumentViewPage({
         document={adapted}
         documentId={id}
         clientEmail={clientEmail}
-        documentLabel={typeLabel}
+        documentLabel={DOCUMENT_LABEL}
       />
     </div>
   );

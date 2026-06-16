@@ -216,7 +216,11 @@ export default function PurchaseOrderPage() {
   const confirmConvert = () => {
     if (!convertPo) return;
     convertMutation.mutate(convertPo.id, {
-      onSuccess: () => setConvertPo(null),
+      onSuccess: (data) => {
+        setConvertPo(null);
+        // Navigate to the newly created expenditure detail page
+        router.push(`/purchases/expenditure/${data.document.id}`);
+      },
     });
   };
 
@@ -910,7 +914,7 @@ export default function PurchaseOrderPage() {
                                         <DropdownMenuItem
                                           onClick={() =>
                                             router.push(
-                                              `/sales-and-invoices/documents/${po.purchaseDocumentId}`,
+                                              `/purchases/expenditure/${po.purchaseDocumentId}`,
                                             )
                                           }
                                         >

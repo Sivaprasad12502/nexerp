@@ -56,6 +56,7 @@ model Business {
   warehouses  Warehouse[]
   products    Product[]
   quotations  Quotation[]
+  payments    Payment[]
 
   // Vendor & relationship back-relations
   vendors             Vendor[]               @relation("BusinessVendors")
@@ -775,7 +776,8 @@ model Document {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  items DocumentItem[]
+  items    DocumentItem[]
+  payments Payment[]
 
   @@index([businessId, type, status])
   @@index([businessId, createdAt])
@@ -826,4 +828,52 @@ model DocumentConversion {
   // One conversion per (source, target type) — prevents duplicate invoices from the same quotation
   @@unique([sourceType, sourceId, targetType])
   @@index([businessId, sourceType, sourceId])
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentMethod {
+  ACCOUNT_TRANSFER
+  CASH
+  CHEQUE
+  UPI
+  CARD
+  OTHER
+}
+
+model Payment {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  amountReceived    Float
+  transactionCharge Float         @default(0)
+  tdsWithheld       Float         @default(0)
+  amountToSettle    Float
+
+  paymentDate DateTime
+  method      PaymentMethod @default(ACCOUNT_TRANSFER)
+  refId       String?
+  notes       String?
+  attachments String[]
+
+  status           PaymentStatus @default(PENDING)
+  recordedByUserId String?
+  recordedByName   String?
+  approvedByUserId String?
+  approvedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+  @@index([documentId])
 }
