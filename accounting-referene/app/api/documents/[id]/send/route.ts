@@ -4,12 +4,16 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
 import { documentSendSchema } from "@/lib/validations/document";
-import { sendPurchaseOrderEmail } from "@/lib/mailer";
+import { sendPurchaseOrderEmail, sendInvoiceEmail } from "@/lib/mailer";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
 // Document types that are allowed to use this send endpoint
-const SENDABLE_TYPES: ("PURCHASE_ORDER" | "SALES_ORDER")[] = ["PURCHASE_ORDER", "SALES_ORDER"];
+const SENDABLE_TYPES: ("PURCHASE_ORDER" | "SALES_ORDER" | "INVOICE")[] = [
+  "PURCHASE_ORDER",
+  "SALES_ORDER",
+  "INVOICE",
+];
 
 export async function POST(req: NextRequest, { params }: RouteCtx) {
   const ctx = await getRbacContext();
@@ -47,25 +51,40 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     process.env.NEXTAUTH_URL?.replace(/\/$/, "") ??
     "";
 
-  // Purchase orders get a public view + accept link; sales orders get no public page yet
   const isPurchaseOrder = document.type === "PURCHASE_ORDER";
+  const isInvoice = document.type === "INVOICE";
   const viewUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}`
-    : "";
+    : isInvoice
+      ? `${origin}/sales-and-invoices/documents/${id}`
+      : "";
   const acceptUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}?action=accept`
     : "";
 
-  const emailSent = await sendPurchaseOrderEmail({
-    to: data.to,
-    cc: data.cc,
-    replyTo: data.replyTo || undefined,
-    subject: data.subject,
-    message: data.message,
-    businessName,
-    viewUrl,
-    acceptUrl,
-  });
+  let emailSent = false;
+  if (isInvoice) {
+    emailSent = await sendInvoiceEmail({
+      to: data.to,
+      cc: data.cc,
+      replyTo: data.replyTo || undefined,
+      subject: data.subject,
+      message: data.message,
+      businessName,
+      viewUrl,
+    });
+  } else {
+    emailSent = await sendPurchaseOrderEmail({
+      to: data.to,
+      cc: data.cc,
+      replyTo: data.replyTo || undefined,
+      subject: data.subject,
+      message: data.message,
+      businessName,
+      viewUrl,
+      acceptUrl,
+    });
+  }
 
   const now = new Date();
 
@@ -80,7 +99,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
           ...(typeof document.settings === "object" && document.settings !== null
             ? (document.settings as object)
             : {}),
-          vendorEmail: data.to,
+          ...(isInvoice ? { clientEmail: data.to } : { vendorEmail: data.to }),
           lastEmailSubject: data.subject,
         },
       },

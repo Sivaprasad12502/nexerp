@@ -65,6 +65,7 @@ export function useConvertSalesOrderToInvoice() {
       );
       qc.invalidateQueries({ queryKey: ["sales-orders"] });
       qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });

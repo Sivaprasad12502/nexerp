@@ -920,7 +920,14 @@ export async function convertSalesOrderToInvoice(
         contactDetails: so.contactDetails,
         attachments: so.attachments,
         customFields: so.customFields as object,
-        settings: so.settings as object,
+        settings: {
+          ...(typeof so.settings === "object" && so.settings !== null
+            ? (so.settings as object)
+            : {}),
+          paymentStatus: "UNPAID",
+          reverseCharge: "No",
+          eInvoiceStatus: "Not Generated",
+        },
         status: "ISSUED",
         createdByUserId: userId,
         items: {

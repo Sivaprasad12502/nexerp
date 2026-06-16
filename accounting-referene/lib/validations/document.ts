@@ -51,7 +51,7 @@ export const documentSendSchema = z.object({
 export type DocumentSendInput = z.infer<typeof documentSendSchema>;
 
 // Reuse quotation item shape for document updates
-import { quotationItemSchema, additionalChargeSchema, customFieldSchema, quotationSettingsSchema } from "@/lib/validations/quotation";
+import { quotationItemSchema, additionalChargeSchema, customFieldSchema } from "@/lib/validations/quotation";
 
 export const documentUpdateSchema = z.object({
   title: z.string().trim().max(300).optional().or(z.literal("")),
@@ -78,7 +78,7 @@ export const documentUpdateSchema = z.object({
   contactDetails: z.string().trim().max(1000).optional().or(z.literal("")),
   attachments: z.array(z.string()).optional(),
   customFields: z.array(customFieldSchema).optional(),
-  settings: quotationSettingsSchema.optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
   items: z.array(quotationItemSchema).optional(),
   status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).optional(),
 });

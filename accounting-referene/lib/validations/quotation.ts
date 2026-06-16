@@ -81,6 +81,21 @@ export const quotationSettingsSchema = z.object({
   showBankDetails:  z.boolean().default(false),
   showUpiDetails:   z.boolean().default(false),
   showBatchSummary: z.boolean().default(false),
+
+  // ── Invoice workflow (stored in Document.settings JSON) ──
+  paymentStatus:    z.enum(["UNPAID", "PENDING", "PAID"]).optional(),
+  paymentDate:      z.string().optional(),
+  reverseCharge:    z.string().optional(),
+  eInvoiceStatus:   z.string().optional(),
+  eInvoiceDetails:  z.string().optional(),
+  eInvoiceAckNo:    z.string().optional(),
+  eInvoiceAckDate:  z.string().optional(),
+  eWayBillNo:       z.string().optional(),
+  eWayBillDate:     z.string().optional(),
+  eWayBillValidTill: z.string().optional(),
+  clientEmail:      z.string().optional(),
+  vendorEmail:      z.string().optional(),
+  lastEmailSubject: z.string().optional(),
 }).default({
   displayUnitAs: "mergeWithQuantity",
   showTaxSummary: false,

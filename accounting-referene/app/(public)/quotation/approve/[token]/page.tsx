@@ -245,7 +245,9 @@ export default function QuotationApprovePage() {
           ? "Purchase order created successfully!"
           : "Purchase order already exists.",
       );
-      refetch();
+      setTimeout(()=>{
+        router.push("/purchases/purchase-order")
+      }, 800)
     },
     onError: (e: Error) => toast.error(e.message),
   });

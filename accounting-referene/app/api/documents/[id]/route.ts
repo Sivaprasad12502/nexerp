@@ -127,7 +127,14 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         ...(data.contactDetails !== undefined && { contactDetails: data.contactDetails || null }),
         ...(data.attachments !== undefined && { attachments: data.attachments }),
         ...(data.customFields !== undefined && { customFields: data.customFields }),
-        ...(data.settings !== undefined && { settings: data.settings }),
+        ...(data.settings !== undefined && {
+          settings: {
+            ...(typeof existing.settings === "object" && existing.settings !== null
+              ? (existing.settings as object)
+              : {}),
+            ...data.settings,
+          } as object,
+        }),
         ...(data.status !== undefined && { status: data.status }),
         ...(enrichedItems && {
           items: {

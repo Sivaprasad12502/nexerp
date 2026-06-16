@@ -150,7 +150,7 @@ export default function PublicPurchaseOrderPage() {
           ? `Sales order ${result.document.documentNumber} created!`
           : "Sales order already exists.",
       );
-      refetch();
+      router.push(`/sales-and-invoices/documents/${result.document.id}`)
     },
     onError: (e: Error) => toast.error(e.message),
   });
