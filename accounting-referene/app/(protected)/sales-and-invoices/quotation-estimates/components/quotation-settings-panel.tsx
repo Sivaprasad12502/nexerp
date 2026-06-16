@@ -312,11 +312,13 @@ export function QuotationSettingsPanel({
   onSettingsChange,
   businessSettings,
   onBusinessSettingsChange,
+  documentLabel = "Quotation",
 }: {
   settings: QuotationSettings;
   onSettingsChange: (patch: Partial<QuotationSettings>) => void;
   businessSettings: BusinessSettingsRow;
   onBusinessSettingsChange: (patch: Partial<BusinessSettingsRow>) => void;
+  documentLabel?: string;
 }) {
   const s = settings;
   const bs = businessSettings;
@@ -326,7 +328,7 @@ export function QuotationSettingsPanel({
   return (
     <div className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-100 overflow-hidden">
       <div className="border-b border-zinc-100 px-4 py-3">
-        <h2 className="font-semibold text-zinc-900">Quotation Settings</h2>
+        <h2 className="font-semibold text-zinc-900">{documentLabel} Settings</h2>
       </div>
 
       {/* ── Advanced Settings ── */}
@@ -350,15 +352,15 @@ export function QuotationSettingsPanel({
           <Toggle label="Show Thumbnails in Separate Column" checked={s.showThumbnails} onChange={(v) => set({ showThumbnails: v })} />
           <Toggle label="Show Description in Full Width" checked={s.showFullWidthDescription} onChange={(v) => set({ showFullWidthDescription: v })} />
           <Toggle label="Hide Subtotal for Group Items" checked={s.hideSubtotalForGroups} onChange={(v) => set({ hideSubtotalForGroups: v })} />
-          <Toggle label="Show SKU in Quotation" checked={s.showSku} onChange={(v) => set({ showSku: v })} />
+          <Toggle label={`Show SKU in ${documentLabel}`} checked={s.showSku} onChange={(v) => set({ showSku: v })} />
           <Toggle label="Show Serial Numbers" checked={s.showSerialNumbers} onChange={(v) => set({ showSerialNumbers: v })} />
           <Toggle label="Display Batch Details" checked={s.showBatchDetails} onChange={(v) => set({ showBatchDetails: v })} />
           <Toggle label="Show HSN Summary" checked={s.showHsnSummary} onChange={(v) => set({ showHsnSummary: v })} />
         </div>
       </Section>
 
-      {/* ── Customize Quotation Design ── */}
-      <Section title="Customize Quotation Design" badge="✨" defaultOpen={true}>
+      {/* ── Customize Design ── */}
+      <Section title={`Customize ${documentLabel} Design`} badge="✨" defaultOpen={true}>
         {/* 1. Select Template */}
         <div className="mb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">
@@ -555,7 +557,7 @@ export function QuotationSettingsPanel({
       {/* ── Bank Details ── */}
       <Section title="Bank Details" defaultOpen={false}>
         <Toggle
-          label="Show Bank Details in Quotation"
+          label={`Show Bank Details in ${documentLabel}`}
           checked={s.showBankDetails}
           onChange={(v) => set({ showBankDetails: v })}
         />
@@ -589,7 +591,7 @@ export function QuotationSettingsPanel({
       {/* ── UPI Details ── */}
       <Section title="UPI Details" defaultOpen={false}>
         <Toggle
-          label="Show UPI Details in Quotation"
+          label={`Show UPI Details in ${documentLabel}`}
           checked={s.showUpiDetails}
           onChange={(v) => set({ showUpiDetails: v })}
         />
@@ -617,13 +619,13 @@ export function QuotationSettingsPanel({
       {/* ── Batch Summary ── */}
       <Section title="Batch Summary" defaultOpen={false}>
         <Toggle
-          label="Show Batch Summary in Quotation"
+          label={`Show Batch Summary in ${documentLabel}`}
           checked={s.showBatchSummary}
           onChange={(v) => set({ showBatchSummary: v })}
         />
         {s.showBatchSummary && (
           <p className="mt-2 text-xs text-zinc-500">
-            Batch details will be displayed in a summary table at the bottom of the quotation when
+            Batch details will be displayed in a summary table at the bottom of the {documentLabel.toLowerCase()} when
             batch information is available on line items.
           </p>
         )}

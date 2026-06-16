@@ -50,11 +50,13 @@ function ProfessionalHeader({
   themeColor,
   settings,
   bs,
+  documentLabel,
 }: {
   q: QuotationRow;
   themeColor: string;
   settings: QuotationSettings;
   bs: BusinessSettingsRow;
+  documentLabel: string;
 }) {
   return (
     <>
@@ -75,7 +77,7 @@ function ProfessionalHeader({
       >
         <div>
           <h1 className="text-2xl font-bold text-white">
-            {q.quotationTitle || "Quotation"}
+            {q.quotationTitle || documentLabel}
           </h1>
           {q.subtitle && (
             <p className="text-sm text-white/80 mt-0.5">{q.subtitle}</p>
@@ -137,11 +139,13 @@ function ModernHeader({
   themeColor,
   settings,
   bs,
+  documentLabel,
 }: {
   q: QuotationRow;
   themeColor: string;
   settings: QuotationSettings;
   bs: BusinessSettingsRow;
+  documentLabel: string;
 }) {
   return (
     <>
@@ -160,13 +164,13 @@ function ModernHeader({
             <img src={q.logo} alt="Logo" className="h-12 object-contain mb-2" />
           )}
           <h1 className="text-xl font-bold" style={{ color: themeColor }}>
-            {q.quotationTitle || "Quotation"}
+            {q.quotationTitle || documentLabel}
           </h1>
           {q.subtitle && <p className="text-xs text-zinc-500">{q.subtitle}</p>}
         </div>
         <div className="text-right text-sm text-zinc-600 space-y-1">
           <div>
-            <span className="text-zinc-400 mr-2">Quotation No:</span>
+            <span className="text-zinc-400 mr-2">{documentLabel} No:</span>
             <strong className="text-zinc-900">{q.quotationNumber}</strong>
           </div>
           <div>
@@ -193,10 +197,12 @@ function SimpleHeader({
   q,
   settings,
   bs,
+  documentLabel,
 }: {
   q: QuotationRow;
   settings: QuotationSettings;
   bs: BusinessSettingsRow;
+  documentLabel: string;
 }) {
   return (
     <>
@@ -215,7 +221,7 @@ function SimpleHeader({
             <img src={q.logo} alt="Logo" className="h-10 object-contain mb-3" />
           )}
           <h1 className="text-2xl font-semibold text-zinc-900">
-            {q.quotationTitle || "Quotation"}
+            {q.quotationTitle || documentLabel}
           </h1>
           {q.subtitle && <p className="text-sm text-zinc-500 mt-1">{q.subtitle}</p>}
         </div>
@@ -240,11 +246,13 @@ function ClassicHeader({
   themeColor,
   settings,
   bs,
+  documentLabel,
 }: {
   q: QuotationRow;
   themeColor: string;
   settings: QuotationSettings;
   bs: BusinessSettingsRow;
+  documentLabel: string;
 }) {
   return (
     <>
@@ -262,7 +270,7 @@ function ClassicHeader({
           <img src={q.logo} alt="Logo" className="h-14 object-contain mx-auto mb-3" />
         )}
         <h1 className="text-3xl font-bold tracking-widest uppercase" style={{ color: themeColor }}>
-          {q.quotationTitle || "Quotation"}
+          {q.quotationTitle || documentLabel}
         </h1>
         {q.subtitle && <p className="text-sm text-zinc-500 mt-1">{q.subtitle}</p>}
         <div className="mt-3 flex justify-center gap-8 text-sm text-zinc-600">
@@ -286,10 +294,12 @@ export function QuotationPreview({
   quotation,
   businessSettings,
   settings,
+  documentLabel = "Quotation",
 }: {
   quotation: QuotationRow;
   businessSettings: BusinessSettingsRow;
   settings: QuotationSettings;
+  documentLabel?: string;
 }) {
   const q = quotation;
   const bs = businessSettings;
@@ -369,20 +379,20 @@ export function QuotationPreview({
       <div className="relative" style={{ zIndex: 1 }}>
         {/* ── Template Header ── */}
         {settings.template === "modern" ? (
-          <ModernHeader q={q} themeColor={themeColor} settings={settings} bs={bs} />
+          <ModernHeader q={q} themeColor={themeColor} settings={settings} bs={bs} documentLabel={documentLabel} />
         ) : settings.template === "simple" ? (
-          <SimpleHeader q={q} settings={settings} bs={bs} />
+          <SimpleHeader q={q} settings={settings} bs={bs} documentLabel={documentLabel} />
         ) : settings.template === "classic" ? (
-          <ClassicHeader q={q} themeColor={themeColor} settings={settings} bs={bs} />
+          <ClassicHeader q={q} themeColor={themeColor} settings={settings} bs={bs} documentLabel={documentLabel} />
         ) : (
-          <ProfessionalHeader q={q} themeColor={themeColor} settings={settings} bs={bs} />
+          <ProfessionalHeader q={q} themeColor={themeColor} settings={settings} bs={bs} documentLabel={documentLabel} />
         )}
 
         {/* ── From / For ── */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="rounded border border-zinc-200 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: themeColor }}>
-              Quotation From
+              {documentLabel} From
             </p>
             {q.fromName && <p className="font-semibold text-sm">{q.fromName}</p>}
             {q.fromAddress && (
@@ -397,7 +407,7 @@ export function QuotationPreview({
           </div>
           <div className="rounded border border-zinc-200 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: themeColor }}>
-              Quotation For
+              {documentLabel} For
             </p>
             {q.clientName && <p className="font-semibold text-sm">{q.clientName}</p>}
             {q.clientAddress && (

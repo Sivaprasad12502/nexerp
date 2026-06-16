@@ -4,10 +4,10 @@ import type { QuotationSettings } from "@/lib/validations/quotation";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 
 /** Map a Document to the QuotationRow shape used by QuotationPreview / QuotationForm. */
-export function adaptDocumentToQuotationRow(doc: DocumentDetail): QuotationRow {
+export function adaptDocumentToQuotationRow(doc: DocumentDetail, titleFallback = "Document"): QuotationRow {
   return {
     id: doc.id,
-    quotationTitle: doc.title ?? "Purchase Order",
+    quotationTitle: doc.title ?? titleFallback,
     quotationNumber: doc.documentNumber,
     quotationDate: doc.documentDate,
     validTillDate: doc.validTillDate,
