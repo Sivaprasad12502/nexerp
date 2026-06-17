@@ -68,6 +68,7 @@ model Business {
   documentConversions DocumentConversion[]
 
   businessSettings BusinessSettings?
+  paymentAccounts  PaymentAccount[]
 }
 
 // ─── Business Settings (branding + finance defaults) ──────────────────────────
@@ -871,9 +872,45 @@ model Payment {
   approvedByUserId String?
   approvedAt       DateTime?
 
+  paymentAccountId String?
+  paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
   @@index([documentId])
+}
+
+// ─── Payment Accounts ─────────────────────────────────────────────────────────
+
+enum PaymentAccountType {
+  BANK
+  EMPLOYEE
+  OTHER
+}
+
+model PaymentAccount {
+  id         String             @id @default(cuid())
+  businessId String
+  business   Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type       PaymentAccountType @default(BANK)
+
+  displayName String
+
+  // Bank-specific fields
+  accountHolderName String?
+  bankName          String?
+  accountNumber     String?
+  ifsc              String?
+  branch            String?
+  accountType       String?   // "SAVINGS" | "CURRENT"
+  upiId             String?
+
+  payments  Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
 }

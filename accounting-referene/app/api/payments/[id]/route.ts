@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
     );
   }
 
-  const { status, transactionCharge = 0, tdsWithheld = 0 } = result.data;
+  const { status, transactionCharge = 0, tdsWithheld = 0, paymentAccountId } = result.data;
 
   const now = new Date();
   const amountToSettle =
@@ -61,6 +61,9 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         amountToSettle,
         approvedByUserId: ctx.userId,
         approvedAt: now,
+        ...(paymentAccountId !== undefined
+          ? { paymentAccountId: paymentAccountId ?? null }
+          : {}),
       },
     });
 

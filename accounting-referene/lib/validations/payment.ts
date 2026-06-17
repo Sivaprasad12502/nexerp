@@ -16,6 +16,7 @@ export const paymentApproveSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
   transactionCharge: z.number().min(0).default(0),
   tdsWithheld: z.number().min(0).default(0),
+  paymentAccountId: z.string().optional().nullable(),
 });
 
 export type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;

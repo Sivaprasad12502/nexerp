@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -31,6 +31,11 @@ import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 import { ActionMenu } from "../../clients-prospects/components/action-menu";
 import { EmailDocumentSheet } from "../components/email-document-sheet";
 import { DOCUMENT_TYPE_LABEL, type DocumentTypeValue } from "@/lib/validations/document";
+import {
+  RecordPaymentModal,
+  type PendingPayment,
+  type InvoiceSummary,
+} from "../components/record-payment-modal";
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -59,6 +64,7 @@ export default function DocumentViewPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const qc = useQueryClient();
 
   // ── Data fetches ──
@@ -70,6 +76,46 @@ export default function DocumentViewPage({
     queryKey: ["business-settings"],
     queryFn: () => fetch("/api/business-settings").then((r) => r.json()),
   });
+
+  // ── Payment state ──
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
+
+  // Fetch payments for this document (enabled only for invoices)
+  const isInvoice = data?.document?.type === "INVOICE";
+
+  const { data: paymentsData } = useQuery<{
+    payments: PendingPayment[];
+  }>({
+    queryKey: ["document-payments", id],
+    queryFn: () => fetch(`/api/documents/${id}/payments`).then((r) => r.json()),
+    enabled: isInvoice,
+  });
+
+  // Auto-open from ?payment= deep-link (email approval link)
+  const autoOpenDone = useRef(false);
+  useEffect(() => {
+    if (autoOpenDone.current) return;
+    const paymentId = searchParams.get("payment");
+    if (!paymentId || !paymentsData?.payments) return;
+    const match = paymentsData.payments.find(
+      (p) => p.id === paymentId && p.status === "PENDING",
+    );
+    if (match) {
+      autoOpenDone.current = true;
+      setPendingPayment(match as PendingPayment);
+      setPaymentModalOpen(true);
+    }
+  }, [searchParams, paymentsData]);
+
+  const handleRecordPaymentClick = () => {
+    // If there's a pending payment, show it in the modal; otherwise open for direct recording
+    const firstPending = paymentsData?.payments?.find(
+      (p) => p.status === "PENDING",
+    );
+    setPendingPayment(firstPending ?? null);
+    setPaymentModalOpen(true);
+  };
 
   // ── Local design state (seeded once from the fetched doc) ──
   const [localSettings, setLocalSettings] =
@@ -161,7 +207,7 @@ export default function DocumentViewPage({
     wide: "30mm",
   };
 
-  // ── States ──
+  // ── Loading/error states ──
   if (isLoading || bsLoading) {
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
@@ -190,6 +236,14 @@ export default function DocumentViewPage({
     DOCUMENT_TYPE_LABEL[doc.type as DocumentTypeValue] ?? doc.type;
   const adapted = adaptDocumentToQuotationRow(doc, typeLabel);
 
+  const invoiceSummary: InvoiceSummary = {
+    documentNumber: doc.documentNumber,
+    clientName: doc.clientName ?? null,
+    subTotal: doc.subTotal,
+    totalAmount: doc.totalAmount,
+    currency: doc.currency,
+  };
+
   // ── Share actions ──
   const shareActions = [
     {
@@ -214,7 +268,6 @@ export default function DocumentViewPage({
     { label: "Send Via Email", onClick: () => setEmailSheetOpen(true) },
   ];
 
-  // Client email from DocumentDetail
   const clientEmail =
     (doc as { client?: { email?: string | null } | null })?.client?.email;
 
@@ -306,11 +359,11 @@ export default function DocumentViewPage({
           </button>
 
           {/* Payment buttons — only for invoices */}
-          {doc.type === "INVOICE" && (
+          {isInvoice && (
             <>
               <button
                 type="button"
-                onClick={() => toast.info("Record Payment — coming soon")}
+                onClick={handleRecordPaymentClick}
                 className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
               >
                 <CreditCard className="size-4" />
@@ -417,6 +470,21 @@ export default function DocumentViewPage({
         clientEmail={clientEmail}
         documentLabel={typeLabel}
       />
+
+      {/* Record Payment modal */}
+      {isInvoice && (
+        <RecordPaymentModal
+          open={paymentModalOpen}
+          onClose={() => setPaymentModalOpen(false)}
+          documentId={id}
+          payment={pendingPayment}
+          invoice={invoiceSummary}
+          onApproved={() => {
+            qc.invalidateQueries({ queryKey: ["documents", id] });
+            qc.invalidateQueries({ queryKey: ["document-payments", id] });
+          }}
+        />
+      )}
     </div>
   );
 }
