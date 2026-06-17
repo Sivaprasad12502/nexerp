@@ -36,6 +36,7 @@ import {
   useDeleteSalesOrder,
   type SalesOrderRow,
 } from "@/lib/hooks/use-sales-orders";
+import { EmailSalesOrderSheet } from "./components/email-sales-order-sheet";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -211,6 +212,7 @@ export default function SalesOrderPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
   const [convertSo, setConvertSo] = useState<SalesOrderRow | null>(null);
+  const [emailSo, setEmailSo] = useState<SalesOrderRow | null>(null);
 
   // ── Tab state ──
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -313,6 +315,11 @@ export default function SalesOrderPage() {
   const openConvert = (so: SalesOrderRow, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setConvertSo(so);
+  };
+
+  const openEmail = (so: SalesOrderRow, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEmailSo(so);
   };
 
   const handleDelete = (so: SalesOrderRow, e: React.MouseEvent) => {
@@ -876,7 +883,7 @@ export default function SalesOrderPage() {
                                     Not Sent{" "}
                                     <button
                                       type="button"
-                                      onClick={(e) => e.stopPropagation()}
+                                      onClick={(e) => openEmail(so, e)}
                                       className="text-[#7438dc] underline hover:no-underline"
                                     >
                                       (Send)
@@ -1073,6 +1080,14 @@ export default function SalesOrderPage() {
 
       {/* Two-step Convert to Invoice flow */}
       <ConvertInvoiceFlow so={convertSo} onClose={() => setConvertSo(null)} />
+
+      {emailSo && (
+        <EmailSalesOrderSheet
+          open={Boolean(emailSo)}
+          onOpenChange={(open) => !open && setEmailSo(null)}
+          salesOrder={emailSo}
+        />
+      )}
     </div>
   );
 }

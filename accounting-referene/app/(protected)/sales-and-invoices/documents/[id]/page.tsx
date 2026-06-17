@@ -236,6 +236,18 @@ export default function DocumentViewPage({
     DOCUMENT_TYPE_LABEL[doc.type as DocumentTypeValue] ?? doc.type;
   const adapted = adaptDocumentToQuotationRow(doc, typeLabel);
 
+  // Derive paid status from approved payments or document settings
+  const approvedTotal = (paymentsData?.payments ?? [])
+    .filter((p) => p.status === "APPROVED")
+    .reduce((sum, p) => sum + p.amountReceived, 0);
+  const docSettings =
+    typeof doc.settings === "object" && doc.settings !== null
+      ? (doc.settings as Record<string, unknown>)
+      : {};
+  const isPaid =
+    docSettings.paymentStatus === "PAID" ||
+    (isInvoice && approvedTotal > 0 && approvedTotal >= doc.totalAmount);
+
   const invoiceSummary: InvoiceSummary = {
     documentNumber: doc.documentNumber,
     clientName: doc.clientName ?? null,
@@ -321,6 +333,12 @@ export default function DocumentViewPage({
               {typeLabel}
             </span>
             <DocumentStatusBadge status={doc.status} />
+            {isPaid && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                <Check className="size-3" />
+                Paid
+              </span>
+            )}
           </div>
         </div>
 

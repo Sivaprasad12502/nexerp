@@ -36,6 +36,20 @@ export async function GET() {
 
   const conversionMap = new Map(invoiceConversions.map((c) => [c.sourceId, c]));
 
+  // SO → buyer PO conversions (buyer-side PO id; seller sees flag via settings)
+  const poConversions = ids.length
+    ? await prisma.documentConversion.findMany({
+        where: {
+          sourceType: "SALES_ORDER",
+          sourceId: { in: ids },
+          targetType: "PURCHASE_ORDER",
+        },
+        select: { sourceId: true, targetId: true },
+      })
+    : [];
+
+  const poConversionMap = new Map(poConversions.map((c) => [c.sourceId, c]));
+
   const invoiceIds = invoiceConversions.map((c) => c.targetId);
   const invoiceDocs = invoiceIds.length
     ? await prisma.document.findMany({
@@ -48,7 +62,16 @@ export async function GET() {
   const salesOrders = documents.map((doc) => {
     const conversion = conversionMap.get(doc.id);
     const invoiceDoc = conversion ? invoiceDocMap.get(conversion.targetId) : null;
+    const poConversion = poConversionMap.get(doc.id);
     const clientName = doc.client?.businessName ?? doc.clientName ?? "";
+    const settings =
+      typeof doc.settings === "object" && doc.settings !== null
+        ? (doc.settings as Record<string, unknown>)
+        : {};
+    const clientEmail =
+      (typeof settings.clientEmail === "string" ? settings.clientEmail : null) ??
+      doc.client?.email ??
+      null;
 
     return {
       id: doc.id,
@@ -61,6 +84,7 @@ export async function GET() {
       sentAt: doc.sentAt,
       fromName: doc.fromName,
       clientName,
+      clientEmail,
       client: doc.client,
       items: doc.items.map((item) => ({
         id: item.id,
@@ -76,6 +100,8 @@ export async function GET() {
       isConvertedToInvoice: Boolean(conversion),
       invoiceDocumentId: invoiceDoc?.id ?? null,
       invoiceDocumentNumber: invoiceDoc?.documentNumber ?? null,
+      isConvertedToPurchaseOrder: Boolean(poConversion) || settings.acceptanceStatus === "ACCEPTED",
+      purchaseOrderDocumentId: poConversion?.targetId ?? null,
       // Acceptance: the SO itself was created by the vendor accepting the PO —
       // so all SOs in this list are inherently "accepted". We flag Invoiced ones
       // as "Completed".

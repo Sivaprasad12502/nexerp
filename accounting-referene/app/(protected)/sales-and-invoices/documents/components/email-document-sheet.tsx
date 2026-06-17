@@ -49,6 +49,37 @@ function fmt(date: string | null | undefined) {
 }
 
 function buildDefaultMessage(doc: QuotationRow, label: string): string {
+  if (label === "Expenditure") {
+    return `Hi ${doc.clientName ?? ""},
+
+This is to confirm that your invoice has been successfully recorded in our expense system and is now being processed.
+
+Please review the invoice details below:
+
+Invoice Date: ${fmt(doc.quotationDate)}
+Amount: ${doc.currency} ${doc.totalAmount}
+Billed By: ${doc.fromName ?? ""}
+
+For any questions or further information, please feel free to reply to this email.
+
+Accounts Team.
+-${doc.fromName ?? ""}`;
+  }
+
+  if (label === "Sales Order") {
+    return `Hi ${doc.clientName ?? ""},
+
+Further to our discussion, please find the Sales Order attached.
+
+Sales Order No: #${doc.quotationNumber}
+Sales Order Date: ${fmt(doc.quotationDate)}
+Sales Order For: ${doc.clientName ?? ""}
+
+Looking forward to doing good business with you.
+
+${doc.fromName ?? ""}`;
+  }
+
   return `Hi ${doc.clientName ?? ""},
 
 Please find attached ${label} #${doc.quotationNumber}.

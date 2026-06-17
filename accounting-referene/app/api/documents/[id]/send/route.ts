@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
 import { documentSendSchema } from "@/lib/validations/document";
-import { sendPurchaseOrderEmail, sendInvoiceEmail } from "@/lib/mailer";
+import { sendPurchaseOrderEmail, sendInvoiceEmail, sendSalesOrderEmail } from "@/lib/mailer";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -52,12 +52,15 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     "";
 
   const isPurchaseOrder = document.type === "PURCHASE_ORDER";
+  const isSalesOrder = document.type === "SALES_ORDER";
   const isInvoice = document.type === "INVOICE";
   const viewUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}`
-    : isInvoice
-      ? `${origin}/invoice/${approvalToken}`
-      : "";
+    : isSalesOrder
+      ? `${origin}/sales-order/${approvalToken}`
+      : isInvoice
+        ? `${origin}/invoice/${approvalToken}`
+        : "";
   const acceptUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}?action=accept`
     : "";
@@ -65,6 +68,16 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   let emailSent = false;
   if (isInvoice) {
     emailSent = await sendInvoiceEmail({
+      to: data.to,
+      cc: data.cc,
+      replyTo: data.replyTo || undefined,
+      subject: data.subject,
+      message: data.message,
+      businessName,
+      viewUrl,
+    });
+  } else if (isSalesOrder) {
+    emailSent = await sendSalesOrderEmail({
       to: data.to,
       cc: data.cc,
       replyTo: data.replyTo || undefined,
@@ -99,7 +112,9 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
           ...(typeof document.settings === "object" && document.settings !== null
             ? (document.settings as object)
             : {}),
-          ...(isInvoice ? { clientEmail: data.to } : { vendorEmail: data.to }),
+          ...(isInvoice || isSalesOrder
+            ? { clientEmail: data.to }
+            : { vendorEmail: data.to }),
           lastEmailSubject: data.subject,
         },
       },

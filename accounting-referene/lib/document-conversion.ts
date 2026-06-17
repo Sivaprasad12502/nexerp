@@ -60,7 +60,16 @@ export type BuyerPurchaseOrderArgs = {
   buyerUserId: string;
 };
 
+export type SalesOrderToBuyerPurchaseOrderArgs = {
+  salesOrderId: string;
+  buyerBusinessId: string;
+  buyerUserId: string;
+  documentNumber?: string;
+  updateBillingAddress?: boolean;
+};
+
 const PO_TARGET: DocumentTypeValue = "PURCHASE_ORDER";
+const SO_SOURCE: DocumentTypeValue = "SALES_ORDER";
 
 // ─── Seller-side conversion (quotation owner) ─────────────────────────────────
 
@@ -466,6 +475,229 @@ export async function convertQuotationToBuyerPurchaseOrder(args: BuyerPurchaseOr
   });
 }
 
+// ─── SO → buyer PO conversion (client accepts sales order) ───────────────────
+
+export async function convertSalesOrderToBuyerPurchaseOrder(
+  args: SalesOrderToBuyerPurchaseOrderArgs,
+) {
+  const {
+    salesOrderId,
+    buyerBusinessId,
+    buyerUserId,
+    documentNumber: customNumber,
+    updateBillingAddress = false,
+  } = args;
+
+  return prisma.$transaction(async (tx) => {
+    const salesOrder = await tx.document.findUnique({
+      where: { id: salesOrderId, type: SO_SOURCE as DocumentType },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        client: { select: { businessName: true, email: true } },
+      },
+    });
+
+    if (!salesOrder) {
+      throw new ConversionError("NOT_FOUND", "Sales order not found.");
+    }
+
+    const sellerBusinessId = salesOrder.businessId;
+
+    if (buyerBusinessId === sellerBusinessId) {
+      throw new ConversionError(
+        "NOT_APPROVED",
+        "Cannot create a purchase order from your own sales order.",
+      );
+    }
+
+    const existingConversion = await tx.documentConversion.findUnique({
+      where: {
+        sourceType_sourceId_targetType: {
+          sourceType: SO_SOURCE,
+          sourceId: salesOrderId,
+          targetType: PO_TARGET,
+        },
+      },
+    });
+
+    if (existingConversion) {
+      const existingDoc = await tx.document.findUnique({
+        where: { id: existingConversion.targetId },
+        include: {
+          items: { orderBy: { sortOrder: "asc" } },
+          client: { select: { id: true, businessName: true } },
+        },
+      });
+      if (existingDoc) return { document: existingDoc, created: false };
+    }
+
+    const buyerBusiness = await tx.business.findUnique({
+      where: { id: buyerBusinessId },
+      select: {
+        name: true,
+        brandName: true,
+        country: true,
+        gstNumber: true,
+      },
+    });
+
+    if (!buyerBusiness) {
+      throw new ConversionError("NO_BUSINESS", "Buyer business not found.");
+    }
+
+    const sellerSnapshot = await loadSellerSnapshot(tx, sellerBusinessId);
+    if (sellerSnapshot) {
+      await ensureVendorRelationship(tx, {
+        buyerBusinessId,
+        sellerBusinessId,
+        sellerSnapshot,
+        quotation: { fromAddress: salesOrder.fromAddress },
+      });
+    }
+
+    const prefix = DOCUMENT_TYPE_PREFIX[PO_TARGET];
+    const count = await tx.document.count({
+      where: { businessId: buyerBusinessId, type: PO_TARGET as DocumentType },
+    });
+    const autoNumber = `${prefix}-${String(count + 1).padStart(4, "0")}`;
+    const documentNumber = customNumber?.trim() || autoNumber;
+
+    const additionalChargesTotal = (
+      Array.isArray(salesOrder.additionalCharges)
+        ? (salesOrder.additionalCharges as { amount?: number }[])
+        : []
+    ).reduce((s, c) => s + (c.amount ?? 0), 0);
+
+    const totals = calcTotals({
+      items: salesOrder.items,
+      discountAmount: salesOrder.discountAmount,
+      additionalCharges: additionalChargesTotal,
+    });
+
+    const now = new Date();
+    const clientName =
+      salesOrder.client?.businessName ?? salesOrder.clientName ?? "Client";
+    const soLabel = salesOrder.documentNumber;
+
+    const buyerFromName = buyerBusiness.brandName ?? buyerBusiness.name;
+    const buyerFromAddress = updateBillingAddress
+      ? buyerBusiness.country
+      : (salesOrder.clientAddress ?? buyerBusiness.country);
+    const buyerFromGstin = updateBillingAddress
+      ? buyerBusiness.gstNumber
+      : salesOrder.clientGstin;
+
+    const document = await tx.document.create({
+      data: {
+        businessId: buyerBusinessId,
+        type: PO_TARGET as DocumentType,
+        documentNumber,
+        documentDate: now,
+        validTillDate: salesOrder.validTillDate,
+        title: salesOrder.title,
+        subtitle: salesOrder.subtitle,
+        logo: salesOrder.logo,
+        currency: salesOrder.currency,
+
+        fromName: buyerFromName,
+        fromAddress: buyerFromAddress,
+        fromGstin: buyerFromGstin,
+        fromPan: null,
+
+        clientId: null,
+        clientName: salesOrder.fromName,
+        clientAddress: salesOrder.fromAddress,
+        clientGstin: salesOrder.fromGstin,
+
+        shipFromWarehouseId: salesOrder.shipFromWarehouseId,
+        shippingName: salesOrder.shippingName,
+        shippingAddress: salesOrder.shippingAddress,
+        shippingPostalCode: salesOrder.shippingPostalCode,
+        shippingState: salesOrder.shippingState,
+        transporterName: salesOrder.transporterName,
+        distance: salesOrder.distance,
+        vehicleType: salesOrder.vehicleType,
+        vehicleNumber: salesOrder.vehicleNumber,
+        transportDocNumber: salesOrder.transportDocNumber,
+        transactionType: salesOrder.transactionType,
+
+        discountLabel: salesOrder.discountLabel,
+        discountAmount: salesOrder.discountAmount,
+        additionalCharges: salesOrder.additionalCharges as object,
+
+        subTotal: totals.subTotal,
+        totalTax: totals.totalTax,
+        totalDiscount: totals.totalDiscount,
+        totalQuantity: totals.totalQuantity,
+        totalAmount: totals.totalAmount,
+        amountInWords: numberToWords(totals.totalAmount, salesOrder.currency),
+
+        termsAndConditions: salesOrder.termsAndConditions,
+        notes: salesOrder.notes,
+        signature: salesOrder.signature,
+        additionalInfo: salesOrder.additionalInfo,
+        contactDetails: salesOrder.contactDetails,
+        attachments: salesOrder.attachments,
+        customFields: salesOrder.customFields as object,
+        settings: salesOrder.settings as object,
+
+        status: "ISSUED",
+        createdByUserId: buyerUserId,
+
+        items: {
+          create: salesOrder.items.map(
+            ({ id: _id, documentId: _did, ...item }) => ({
+              ...item,
+              productId: item.productId ?? null,
+            }),
+          ),
+        },
+      },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        client: { select: { id: true, businessName: true } },
+      },
+    });
+
+    await tx.documentConversion.create({
+      data: {
+        businessId: buyerBusinessId,
+        sourceType: SO_SOURCE,
+        sourceId: salesOrderId,
+        targetType: PO_TARGET,
+        targetId: document.id,
+        createdByUserId: buyerUserId,
+      },
+    });
+
+    const existingSettings =
+      typeof salesOrder.settings === "object" && salesOrder.settings !== null
+        ? (salesOrder.settings as Record<string, unknown>)
+        : {};
+
+    await tx.document.update({
+      where: { id: salesOrderId },
+      data: {
+        settings: {
+          ...existingSettings,
+          purchaseOrderCreatedAt: now.toISOString(),
+          acceptanceStatus: "ACCEPTED",
+        },
+      },
+    });
+
+    await notifyBusinessOwner(tx, sellerBusinessId, {
+      type: NotificationType.PURCHASE_ORDER_RECEIVED,
+      title: "Purchase Order received from client",
+      message: `${clientName} created a purchase order from sales order ${soLabel}.`,
+      entityType: "DOCUMENT",
+      entityId: salesOrderId,
+    });
+
+    return { document, created: true };
+  });
+}
+
 // ─── PO → Purchase (vendor bill) conversion ───────────────────────────────────
 
 const PURCHASE_TARGET: DocumentTypeValue = "INVOICE";
@@ -609,6 +841,241 @@ export async function convertPurchaseOrderToPurchase(args: ConvertPoToPurchaseAr
     await tx.document.update({
       where: { id: purchaseOrderId },
       data: { purchasedAt: now },
+    });
+
+    return { document, created: true };
+  });
+}
+
+// ─── Expense (purchased invoice) → Vendor Invoice conversion ──────────────────
+// When a vendor receives a "Purchases and Expenses" email and clicks Accept
+// Invoice, this creates a new INVOICE document in the vendor's own business.
+
+const EXPENSE_SOURCE = "INVOICE";
+const VENDOR_INVOICE_TARGET: DocumentTypeValue = "INVOICE";
+
+export type ConvertExpenseToVendorInvoiceArgs = {
+  expenseDocumentId: string;
+  vendorBusinessId: string;
+  vendorUserId: string;
+  documentNumber?: string;
+  updateBillingAddress?: boolean;
+};
+
+export async function convertExpenseToVendorInvoice(
+  args: ConvertExpenseToVendorInvoiceArgs,
+) {
+  const {
+    expenseDocumentId,
+    vendorBusinessId,
+    vendorUserId,
+    documentNumber: customNumber,
+    updateBillingAddress = false,
+  } = args;
+
+  return prisma.$transaction(async (tx) => {
+    // ── 1. Load the source expense ──────────────────────────────────────────
+    const expense = await tx.document.findUnique({
+      where: { id: expenseDocumentId, type: EXPENSE_SOURCE as DocumentType },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        business: {
+          select: { name: true, brandName: true, country: true, gstNumber: true },
+        },
+      },
+    });
+
+    if (!expense || !expense.purchasedAt) {
+      throw new ConversionError(
+        "NOT_FOUND",
+        "Expense document not found or is not an expense.",
+      );
+    }
+
+    // ── 2. Prevent self-acceptance ──────────────────────────────────────────
+    if (vendorBusinessId === expense.businessId) {
+      throw new ConversionError(
+        "NOT_APPROVED",
+        "Cannot create an invoice from your own expense record.",
+      );
+    }
+
+    // ── 3. Idempotency check ────────────────────────────────────────────────
+    const existingConversion = await tx.documentConversion.findUnique({
+      where: {
+        sourceType_sourceId_targetType: {
+          sourceType: EXPENSE_SOURCE,
+          sourceId: expenseDocumentId,
+          targetType: VENDOR_INVOICE_TARGET,
+        },
+      },
+    });
+
+    if (existingConversion) {
+      const existingDoc = await tx.document.findUnique({
+        where: { id: existingConversion.targetId },
+        include: {
+          items: { orderBy: { sortOrder: "asc" } },
+          client: { select: { id: true, businessName: true } },
+        },
+      });
+      if (existingDoc) return { document: existingDoc, created: false };
+    }
+
+    // ── 4. Load vendor business ─────────────────────────────────────────────
+    const vendorBusiness = await tx.business.findUnique({
+      where: { id: vendorBusinessId },
+      select: { name: true, brandName: true, country: true, gstNumber: true },
+    });
+
+    if (!vendorBusiness) {
+      throw new ConversionError("NO_BUSINESS", "Vendor business not found.");
+    }
+
+    // ── 5. Generate document number ─────────────────────────────────────────
+    const prefix = DOCUMENT_TYPE_PREFIX[VENDOR_INVOICE_TARGET];
+    const count = await tx.document.count({
+      where: {
+        businessId: vendorBusinessId,
+        type: VENDOR_INVOICE_TARGET as DocumentType,
+      },
+    });
+    const autoNumber = `${prefix}-${String(count + 1).padStart(4, "0")}`;
+    const documentNumber = customNumber?.trim() || autoNumber;
+
+    // ── 6. Compute totals ───────────────────────────────────────────────────
+    const additionalChargesTotal = (
+      Array.isArray(expense.additionalCharges)
+        ? (expense.additionalCharges as { amount?: number }[])
+        : []
+    ).reduce((s, c) => s + (c.amount ?? 0), 0);
+
+    const totals = calcTotals({
+      items: expense.items,
+      discountAmount: expense.discountAmount,
+      additionalCharges: additionalChargesTotal,
+    });
+
+    const now = new Date();
+
+    // ── 7. Perspective swap ─────────────────────────────────────────────────
+    // In the expense: fromName = buyer (your org), clientName = vendor.
+    // In the vendor invoice: fromName = vendor, clientName = buyer.
+    const vendorFromName = updateBillingAddress
+      ? (vendorBusiness.brandName ?? vendorBusiness.name)
+      : (expense.clientName ?? vendorBusiness.brandName ?? vendorBusiness.name);
+    const vendorFromAddress = updateBillingAddress
+      ? vendorBusiness.country
+      : (expense.clientAddress ?? vendorBusiness.country);
+    const vendorFromGstin = updateBillingAddress
+      ? vendorBusiness.gstNumber
+      : expense.clientGstin;
+
+    // ── 8. Create vendor invoice ────────────────────────────────────────────
+    const document = await tx.document.create({
+      data: {
+        businessId: vendorBusinessId,
+        type: VENDOR_INVOICE_TARGET as DocumentType,
+        documentNumber,
+        documentDate: now,
+        validTillDate: expense.validTillDate,
+        title: expense.title ?? "Invoice",
+        subtitle: expense.subtitle,
+        logo: expense.logo,
+        currency: expense.currency,
+
+        // Vendor becomes the biller
+        fromName: vendorFromName,
+        fromAddress: vendorFromAddress,
+        fromGstin: vendorFromGstin,
+        fromPan: null,
+
+        // Buyer (original expense owner) becomes the client
+        clientId: null,
+        clientName: expense.fromName,
+        clientAddress: expense.fromAddress,
+        clientGstin: expense.fromGstin,
+
+        discountLabel: expense.discountLabel,
+        discountAmount: expense.discountAmount,
+        additionalCharges: expense.additionalCharges as object,
+
+        subTotal: totals.subTotal,
+        totalTax: totals.totalTax,
+        totalDiscount: totals.totalDiscount,
+        totalQuantity: totals.totalQuantity,
+        totalAmount: totals.totalAmount,
+        amountInWords: numberToWords(totals.totalAmount, expense.currency),
+
+        termsAndConditions: expense.termsAndConditions,
+        notes: expense.notes,
+        signature: expense.signature,
+        additionalInfo: expense.additionalInfo,
+        contactDetails: expense.contactDetails,
+        attachments: expense.attachments,
+        customFields: expense.customFields as object,
+        settings: {
+          paymentStatus: "UNPAID",
+          reverseCharge: "No",
+          eInvoiceStatus: "Not Generated",
+        },
+
+        status: "ISSUED",
+        purchasedAt: null, // this is a real sales invoice, not an expense
+        createdByUserId: vendorUserId,
+
+        items: {
+          create: expense.items.map(({ id: _id, documentId: _did, ...item }) => ({
+            ...item,
+            productId: item.productId ?? null,
+          })),
+        },
+      },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        client: { select: { id: true, businessName: true } },
+      },
+    });
+
+    // ── 9. Write conversion audit row ───────────────────────────────────────
+    await tx.documentConversion.create({
+      data: {
+        businessId: vendorBusinessId,
+        sourceType: EXPENSE_SOURCE,
+        sourceId: expenseDocumentId,
+        targetType: VENDOR_INVOICE_TARGET,
+        targetId: document.id,
+        createdByUserId: vendorUserId,
+      },
+    });
+
+    // ── 10. Stamp acceptance on the source expense ──────────────────────────
+    const existingSettings =
+      typeof expense.settings === "object" && expense.settings !== null
+        ? (expense.settings as Record<string, unknown>)
+        : {};
+
+    await tx.document.update({
+      where: { id: expenseDocumentId },
+      data: {
+        settings: {
+          ...existingSettings,
+          acceptanceStatus: "ACCEPTED",
+          invoiceCreatedAt: now.toISOString(),
+        },
+      },
+    });
+
+    // ── 11. Notify the expense owner ────────────────────────────────────────
+    const buyerBusinessName =
+      expense.business?.brandName ?? expense.business?.name ?? "Buyer";
+
+    await notifyBusinessOwner(tx, expense.businessId, {
+      type: NotificationType.INVOICE_RECEIVED,
+      title: "Invoice accepted by vendor",
+      message: `${buyerBusinessName} — Invoice ${document.documentNumber} created by vendor for expense ${expense.documentNumber}.`,
+      entityType: "DOCUMENT",
+      entityId: expenseDocumentId,
     });
 
     return { document, created: true };

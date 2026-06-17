@@ -68,7 +68,7 @@ const items: NavItem[] = [
     label: "Purchases & Expenses",
     icon: ShoppingCart,
     children: [
-      { label: "Vendors", href: "/purchases/vendors" },
+      { label: "Vendors & Suppliers", href: "/purchases/vendors" },
       { label: "Purchases & Expenses", href: "/purchases/expenditure" },
       { label: "Purchase Orders", href: "/purchases/purchase-order" },
     ],

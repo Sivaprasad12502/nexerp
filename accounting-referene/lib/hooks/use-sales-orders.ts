@@ -24,11 +24,14 @@ export type SalesOrderRow = {
   sentAt: string | null;
   fromName: string | null;
   clientName: string;
+  clientEmail: string | null;
   client: { id: string; businessName: string; logo: string | null; email: string | null } | null;
   items: SalesOrderItem[];
   isConvertedToInvoice: boolean;
   invoiceDocumentId: string | null;
   invoiceDocumentNumber: string | null;
+  isConvertedToPurchaseOrder: boolean;
+  purchaseOrderDocumentId: string | null;
   acceptanceStatus: "ACCEPTED";
   emailSent: boolean;
   workflowStatus: string;

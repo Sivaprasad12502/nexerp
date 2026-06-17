@@ -11,6 +11,22 @@ const patchSchema = vendorCreateSchema
   .partial()
   .extend({ status: z.enum(["ACTIVE", "ARCHIVED"]).optional() });
 
+const linkedContactsInclude = {
+  linkedContacts: {
+    select: {
+      contact: {
+        select: {
+          id:        true,
+          firstName: true,
+          lastName:  true,
+          email:     true,
+          image:     true,
+        },
+      },
+    },
+  },
+} as const;
+
 export async function GET(_req: NextRequest, { params }: RouteCtx) {
   const { id } = await params;
   const ctx = await getRbacContext();
@@ -18,6 +34,7 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
 
   const vendor = await prisma.vendor.findFirst({
     where: { id, businessId: ctx.businessId },
+    include: linkedContactsInclude,
   });
 
   if (!vendor) {
@@ -84,18 +101,50 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
     );
   }
 
+  const linkedContactIds: string[] | undefined = Array.isArray(body?.linkedContactIds)
+    ? (body.linkedContactIds as string[])
+    : undefined;
+
   const data = result.data;
   const vendor = await prisma.vendor.update({
     where: { id },
     data: {
-      ...(data.name      !== undefined && { name:      data.name }),
-      ...(data.email     !== undefined && { email:     data.email     || null }),
-      ...(data.phone     !== undefined && { phone:     data.phone     || null }),
-      ...(data.website   !== undefined && { website:   data.website   || null }),
-      ...(data.address   !== undefined && { address:   data.address   || null }),
-      ...(data.gstNumber !== undefined && { gstNumber: data.gstNumber || null }),
-      ...(data.status    !== undefined && { status:    data.status }),
+      ...(data.name            !== undefined && { name:            data.name }),
+      ...(data.logo            !== undefined && { logo:            data.logo            || null }),
+      ...(data.industry        !== undefined && { industry:        data.industry        || null }),
+      ...(data.country         !== undefined && { country:         data.country         || null }),
+      ...(data.city            !== undefined && { city:            data.city            || null }),
+      ...(data.vendorType      !== undefined && { vendorType:      data.vendorType }),
+      ...(data.email           !== undefined && { email:           data.email           || null }),
+      ...(data.phoneCode       !== undefined && { phoneCode:       data.phoneCode       || null }),
+      ...(data.phone           !== undefined && { phone:           data.phone           || null }),
+      ...(data.showEmailInDocs !== undefined && { showEmailInDocs: data.showEmailInDocs }),
+      ...(data.showPhoneInDocs !== undefined && { showPhoneInDocs: data.showPhoneInDocs }),
+      ...(data.website         !== undefined && { website:         data.website         || null }),
+      ...(data.gstNumber       !== undefined && { gstNumber:       data.gstNumber       || null }),
+      ...(data.trn             !== undefined && { trn:             data.trn             || null }),
+      ...(data.vatNumber       !== undefined && { vatNumber:       data.vatNumber       || null }),
+      ...(data.taxTreatment    !== undefined && { taxTreatment:    data.taxTreatment    || null }),
+      ...(data.addressCountry  !== undefined && { addressCountry:  data.addressCountry  || null }),
+      ...(data.state           !== undefined && { state:           data.state           || null }),
+      ...(data.district        !== undefined && { district:        data.district        || null }),
+      ...(data.addressCity     !== undefined && { addressCity:     data.addressCity     || null }),
+      ...(data.buildingNumber  !== undefined && { buildingNumber:  data.buildingNumber  || null }),
+      ...(data.postalCode      !== undefined && { postalCode:      data.postalCode      || null }),
+      ...(data.streetAddress   !== undefined && { streetAddress:   data.streetAddress   || null }),
+      ...(data.address         !== undefined && { address:         data.address         || null }),
+      ...(data.businessAlias   !== undefined && { businessAlias:   data.businessAlias   || null }),
+      ...(data.defaultDueDays  !== undefined && { defaultDueDays:  data.defaultDueDays  ?? null }),
+      ...(data.paymentAccount  !== undefined && { paymentAccount:  data.paymentAccount  || null }),
+      ...(data.status          !== undefined && { status:          data.status }),
+      ...(linkedContactIds !== undefined && {
+        linkedContacts: {
+          deleteMany: {},
+          create: linkedContactIds.map((contactId) => ({ contactId })),
+        },
+      }),
     },
+    include: linkedContactsInclude,
   });
 
   return NextResponse.json({ vendor });

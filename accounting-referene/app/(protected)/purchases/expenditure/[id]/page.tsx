@@ -3,7 +3,6 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
   ArrowLeft,
   ChevronRight,
@@ -16,8 +15,6 @@ import {
   Pencil,
   Plus,
   Printer,
-  CreditCard,
-  Clock,
 } from "lucide-react";
 
 import { useDocument } from "@/lib/hooks/use-documents";
@@ -32,7 +29,7 @@ import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 import { ActionMenu } from "../../../sales-and-invoices/clients-prospects/components/action-menu";
 import { EmailDocumentSheet } from "../../../sales-and-invoices/documents/components/email-document-sheet";
 
-const DOCUMENT_LABEL = "Expenditure";
+const DOCUMENT_LABEL = "Billed ";
 
 // ─── Status badge ──────────────────────────────────────────────────────────────
 
@@ -308,26 +305,6 @@ export default function ExpenditureDetailPage({
           >
             <Pencil className="size-4" />
             <span>Edit</span>
-          </button>
-
-          {/* Record Payment — stub */}
-          <button
-            type="button"
-            onClick={() => toast.info("Record Payment — coming soon")}
-            className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-          >
-            <CreditCard className="size-4" />
-            <span>Record Payment</span>
-          </button>
-
-          {/* Will Pay Later — stub */}
-          <button
-            type="button"
-            onClick={() => toast.info("Will Pay Later — coming soon")}
-            className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
-          >
-            <Clock className="size-4" />
-            <span>Will Pay Later</span>
           </button>
 
           <div className="mx-1 h-8 w-px bg-zinc-200" />

@@ -19,7 +19,7 @@ export default function NewVendorPage() {
         <h1 className="text-2xl font-bold text-zinc-900">Add Vendor</h1>
       </div>
 
-      <div className="mx-auto max-w-2xl px-4 pt-8 sm:px-6">
+      <div className="mx-auto max-w-3xl px-4 pt-8 sm:px-6">
         <VendorForm onCancel={() => router.push("/purchases/vendors")} />
       </div>
     </div>

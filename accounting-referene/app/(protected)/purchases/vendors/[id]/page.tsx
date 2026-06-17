@@ -44,14 +44,20 @@ function fmt(date: string | null | undefined) {
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
   return (
-    <div className="grid grid-cols-[160px_1fr] gap-2 py-1.5 text-sm">
+    <div className="grid grid-cols-[180px_1fr] gap-2 py-1.5 text-sm">
       <span className="text-zinc-500">{label}</span>
       <span className="text-zinc-800">{value}</span>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white">
       <div className="border-b border-zinc-100 px-6 py-3">
@@ -108,6 +114,28 @@ export default function VendorDetailPage({
   const { vendor, quotations } = data;
   const isAuto = !!vendor.linkedBusinessId;
 
+  // Build structured address string for display
+  const structuredAddress = [
+    vendor.streetAddress,
+    vendor.buildingNumber ? `Bldg ${vendor.buildingNumber}` : null,
+    vendor.district,
+    vendor.addressCity,
+    vendor.state,
+    vendor.postalCode,
+    vendor.addressCountry,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const hasTax =
+    vendor.gstNumber || vendor.trn || vendor.vatNumber || vendor.taxTreatment;
+
+  const hasAddress =
+    structuredAddress || vendor.address;
+
+  const hasAdditional =
+    vendor.businessAlias || vendor.defaultDueDays != null || vendor.paymentAccount;
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50 pb-12">
       {/* Header */}
@@ -136,6 +164,9 @@ export default function VendorDetailPage({
                   }`}
                 >
                   {vendor.status === "ACTIVE" ? "Active" : "Archived"}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+                  {vendor.vendorType === "INDIVIDUAL" ? "Individual" : "Company"}
                 </span>
                 {isAuto && (
                   <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
@@ -176,13 +207,15 @@ export default function VendorDetailPage({
 
       {/* Body */}
       <div className="mx-auto max-w-3xl space-y-4 px-4 pt-8 sm:px-6">
-        {/* Basic info */}
+
+        {/* Basic Information */}
         <Section title="Basic Information">
-          <Field label="Name"    value={vendor.name} />
-          <Field label="Email"   value={vendor.email} />
-          <Field label="Phone"   value={vendor.phone} />
+          <Field label="Name"     value={vendor.name} />
+          <Field label="Industry" value={vendor.industry} />
+          <Field label="Country"  value={vendor.country} />
+          <Field label="City"     value={vendor.city} />
           {vendor.website ? (
-            <div className="grid grid-cols-[160px_1fr] gap-2 py-1.5 text-sm">
+            <div className="grid grid-cols-[180px_1fr] gap-2 py-1.5 text-sm">
               <span className="text-zinc-500">Website</span>
               <a
                 href={vendor.website}
@@ -198,21 +231,107 @@ export default function VendorDetailPage({
           <Field label="Added on" value={fmt(vendor.createdAt)} />
         </Section>
 
-        {/* Tax */}
-        {vendor.gstNumber && (
-          <Section title="Tax">
-            <Field label="GST Number" value={vendor.gstNumber} />
+        {/* Contact Information */}
+        <Section title="Contact Information">
+          <Field
+            label="Email"
+            value={vendor.email}
+          />
+          <Field
+            label="Phone"
+            value={
+              vendor.phone
+                ? `${vendor.phoneCode ?? ""} ${vendor.phone}`.trim()
+                : null
+            }
+          />
+        </Section>
+
+        {/* Tax Information */}
+        {hasTax && (
+          <Section title="Tax Information">
+            <Field label="GST Number"    value={vendor.gstNumber} />
+            <Field label="TRN"           value={vendor.trn} />
+            <Field label="VAT Number"    value={vendor.vatNumber} />
+            <Field label="Tax Treatment" value={vendor.taxTreatment} />
           </Section>
         )}
 
-        {/* Address */}
-        {vendor.address && (
-          <Section title="Address">
-            <p className="whitespace-pre-wrap text-sm text-zinc-800">{vendor.address}</p>
+        {/* Billing Address */}
+        {hasAddress && (
+          <Section title="Billing Address">
+            {structuredAddress ? (
+              <>
+                <Field label="Country"         value={vendor.addressCountry} />
+                <Field label="State / Province" value={vendor.state} />
+                <Field label="District"        value={vendor.district} />
+                <Field label="City"            value={vendor.addressCity} />
+                <Field label="Building Number" value={vendor.buildingNumber} />
+                <Field label="Postal Code"     value={vendor.postalCode} />
+                <Field label="Street Address"  value={vendor.streetAddress} />
+              </>
+            ) : (
+              vendor.address && (
+                <p className="whitespace-pre-wrap text-sm text-zinc-800">
+                  {vendor.address}
+                </p>
+              )
+            )}
           </Section>
         )}
 
-        {/* Transaction history */}
+        {/* Additional Details */}
+        {hasAdditional && (
+          <Section title="Additional Details">
+            <Field label="Business Alias"    value={vendor.businessAlias} />
+            <Field
+              label="Default Due Days"
+              value={
+                vendor.defaultDueDays != null
+                  ? `${vendor.defaultDueDays} days`
+                  : null
+              }
+            />
+            <Field label="Payment Account"   value={vendor.paymentAccount} />
+          </Section>
+        )}
+
+        {/* Linked Contacts */}
+        {vendor.linkedContacts && vendor.linkedContacts.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-white">
+            <div className="border-b border-zinc-100 px-6 py-3">
+              <h2 className="text-sm font-semibold text-zinc-800">
+                Linked Contacts
+                <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
+                  {vendor.linkedContacts.length}
+                </span>
+              </h2>
+            </div>
+            <ul className="divide-y divide-zinc-50 px-6 py-2">
+              {vendor.linkedContacts.map(({ contact: c }) => {
+                const fullName = [c.firstName, c.lastName].filter(Boolean).join(" ");
+                const initials = `${c.firstName[0]}${c.lastName?.[0] ?? ""}`.toUpperCase();
+                return (
+                  <li key={c.id} className="flex items-center gap-3 py-2.5">
+                    {c.image ? (
+                      <img src={c.image} alt={fullName} className="size-8 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-medium text-white">
+                        {initials}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-zinc-900">{fullName}</p>
+                      {c.email && <p className="text-xs text-zinc-500">{c.email}</p>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {/* Transaction History */}
         <div className="rounded-lg border border-zinc-200 bg-white">
           <div className="border-b border-zinc-100 px-6 py-3">
             <h2 className="text-sm font-semibold text-zinc-800">
@@ -256,7 +375,9 @@ export default function VendorDetailPage({
                       key={q.id}
                       className="cursor-pointer hover:bg-zinc-50/80"
                       onClick={() =>
-                        router.push(`/sales-and-invoices/quotation-estimates/${q.id}`)
+                        router.push(
+                          `/sales-and-invoices/quotation-estimates/${q.id}`,
+                        )
                       }
                     >
                       <td className="px-4 py-2.5 font-medium text-zinc-900">

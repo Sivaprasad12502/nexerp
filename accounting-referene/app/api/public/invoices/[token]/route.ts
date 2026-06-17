@@ -56,8 +56,33 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     },
   });
 
+  // For expense docs (purchasedAt set), expose acceptance state so the public
+  // page can render Accept / Reject buttons.
+  let isAccepted = false;
+  let invoiceDocumentId: string | null = null;
+  const acceptanceStatus = (settings.acceptanceStatus as string) ?? null;
+
+  if (document.purchasedAt) {
+    const conversion = await prisma.documentConversion.findUnique({
+      where: {
+        sourceType_sourceId_targetType: {
+          sourceType: "INVOICE",
+          sourceId: document.id,
+          targetType: "INVOICE",
+        },
+      },
+      select: { targetId: true },
+    });
+    invoiceDocumentId = conversion?.targetId ?? null;
+    isAccepted = Boolean(conversion) || acceptanceStatus === "ACCEPTED";
+  }
+
   return NextResponse.json({
     document: { ...document, settings },
     payments,
+    isAccepted,
+    acceptanceStatus,
+    invoiceDocumentId,
+    recipientEmail: (settings.clientEmail as string) ?? null,
   });
 }

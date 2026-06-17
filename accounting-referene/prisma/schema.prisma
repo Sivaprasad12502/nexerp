@@ -160,6 +160,7 @@ model Contact {
   updatedAt DateTime      @updatedAt
 
   linkedClients ClientContact[]
+  linkedVendors VendorContact[]
 
   @@index([businessId, status])
 }
@@ -610,6 +611,11 @@ enum VendorStatus {
   ARCHIVED
 }
 
+enum VendorType {
+  INDIVIDUAL
+  COMPANY
+}
+
 enum BusinessRelationshipStatus {
   ACTIVE
   BLOCKED
@@ -623,20 +629,64 @@ model Vendor {
   business         Business     @relation("BusinessVendors", fields: [businessId], references: [id], onDelete: Cascade)
   linkedBusinessId String?                           // SELLER's business id; null for manually-added vendors
 
-  name      String
-  email     String?
-  phone     String?
-  website   String?
-  address   String?
-  gstNumber String?
+  name       String
+  email      String?
+  phone      String?
+  website    String?
+  address    String?   // legacy free-text; kept for backward compat
+  gstNumber  String?
+
+  // Extended fields (mirrors Client model)
+  logo           String?
+  industry       String?
+  country        String?
+  city           String?
+  vendorType     VendorType @default(COMPANY)
+
+  // Tax
+  trn            String?
+  vatNumber      String?
+  taxTreatment   String?
+
+  // Structured billing address
+  addressCountry String?
+  state          String?
+  district       String?
+  addressCity    String?
+  buildingNumber String?
+  postalCode     String?
+  streetAddress  String?
+
+  // Additional details
+  businessAlias     String?
+  phoneCode         String?  @default("+971")
+  showEmailInDocs   Boolean  @default(false)
+  showPhoneInDocs   Boolean  @default(false)
+  defaultDueDays    Int?
+  paymentAccount    String?
 
   status    VendorStatus @default(ACTIVE)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  linkedContacts VendorContact[]
+
   // NULL values are distinct in PG, so manual vendors (linkedBusinessId = NULL) don't collide with each other
   @@unique([businessId, linkedBusinessId])
   @@index([businessId, status])
+}
+
+model VendorContact {
+  id        String  @id @default(cuid())
+  vendorId  String
+  vendor    Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([vendorId, contactId])
 }
 
 /// Persistent link between a buyer business and a seller business, created when the first
