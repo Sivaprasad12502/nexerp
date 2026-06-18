@@ -27,3 +27,18 @@ export const businessSchema = businessStep1Schema.merge(businessStep2Schema);
 export type BusinessInput = z.infer<typeof businessSchema>;
 export type BusinessStep1Input = z.infer<typeof businessStep1Schema>;
 export type BusinessStep2Input = z.infer<typeof businessStep2Schema>;
+
+// Partial patch schema for the "Business details" modal in document forms
+export const businessProfilePatchSchema = z.object({
+  name: z.string().min(1, "Business name is required").optional(),
+  country: z.string().optional(),
+  city: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  hasGst: z.boolean().optional(),
+  panNumber: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  website: z.string().optional().nullable(),
+});
+
+export type BusinessProfilePatchInput = z.infer<typeof businessProfilePatchSchema>;

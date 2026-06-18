@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import {
   useForm,
   useFieldArray,
@@ -26,6 +26,7 @@ import {
   Settings2,
   Pen,
   Gem,
+  Pencil,
 } from "lucide-react";
 
 import { uploadFile } from "@/lib/upload";
@@ -44,10 +45,28 @@ import {
   VendorForm,
   type VendorRow,
 } from "../../../purchases/vendors/components/vendor-form";
+import { BusinessDetailsModal } from "./business-details-modal";
+import {
+  isQuotationFormPayload,
+  quotationFormToDocumentUpdate,
+} from "@/lib/document-adapter";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type ClientBasic = { id: string; businessName: string; logo: string | null };
+
+type BusinessProfile = {
+  id: string;
+  name: string;
+  country: string;
+  city: string | null;
+  address: string | null;
+  gstNumber: string | null;
+  hasGst: boolean;
+  panNumber: string | null;
+  phone: string | null;
+  website: string | null;
+};
 
 type ProductBasic = {
   id: string;
@@ -216,6 +235,22 @@ export function QuotationForm({
     // Seed on edit: best-effort match (vendor data available after query loads)
     "",
   );
+  const [businessDetailsOpen, setBusinessDetailsOpen] = useState(false);
+  // Business details modal local form state
+  const [bdName, setBdName] = useState("");
+  const [bdCountry, setBdCountry] = useState("India");
+  const [bdCity, setBdCity] = useState("");
+  const [bdAddress, setBdAddress] = useState("");
+  const [bdGstin, setBdGstin] = useState("");
+  const [bdPan, setBdPan] = useState("");
+  const [bdPhone, setBdPhone] = useState("");
+  const [bdWebsite, setBdWebsite] = useState("");
+  const [bdTaxOpen, setBdTaxOpen] = useState(false);
+  const [bdAddrOpen, setBdAddrOpen] = useState(false);
+  const [bdMoreOpen, setBdMoreOpen] = useState(false);
+  const [bdUpdatePrevious, setBdUpdatePrevious] = useState(false);
+  const [bdUpdateFuture, setBdUpdateFuture] = useState(true);
+  const [bdSaving, setBdSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [signatureUploading, setSignatureUploading] = useState(false);
   const [showShipping, setShowShipping] = useState(
@@ -440,6 +475,12 @@ export function QuotationForm({
     enabled: isVendor,
   });
 
+  const { data: businessData } = useQuery<{ business: BusinessProfile }>({
+    queryKey: ["business"],
+    queryFn: () => fetch("/api/business").then((r) => r.json()),
+    staleTime: 60_000,
+  });
+
   const { data: productsData } = useQuery<{ products: ProductBasic[] }>({
     queryKey: ["products", "ACTIVE"],
     queryFn: () => fetch("/api/products?status=ACTIVE").then((r) => r.json()),
@@ -462,17 +503,21 @@ export function QuotationForm({
         ? cfg.updateEndpoint(initialData!.id)
         : cfg.createEndpoint;
       const method = isEdit ? "PATCH" : "POST";
+      const requestBody =
+        method === "PATCH" && url.includes("/api/documents/") && isQuotationFormPayload(payload)
+          ? quotationFormToDocumentUpdate(payload)
+          : payload;
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestBody),
       });
-      const body = await res.json().catch(() => ({}));
+      const json = await res.json().catch(() => ({}));
       if (!res.ok)
         throw new Error(
-          body.error?.items?.[0] ?? body.error ?? "Failed to save",
+          json.error?.items?.[0] ?? json.error ?? "Failed to save",
         );
-      return body;
+      return json;
     },
     onSuccess: (body) => {
       toast.success(isEdit ? `${cfg.resourceLabel} updated` : `${cfg.resourceLabel} created`);
@@ -593,6 +638,94 @@ export function QuotationForm({
     if (v) selectVendor(v);
   };
 
+  // ── Vendor select on edit: match saved vendor name to list ──
+  const vendorSeeded = useRef(false);
+  useEffect(() => {
+    if (vendorSeeded.current || !isEdit || !isVendor || !initialData?.clientName) return;
+    const name = initialData.clientName.toLowerCase();
+    const match = vendors.find((v) => v.name.toLowerCase() === name);
+    if (match) {
+      vendorSeeded.current = true;
+      setSelectedVendorId(match.id);
+    }
+  }, [isEdit, isVendor, initialData?.clientName, vendors]);
+
+  // ── Business profile: auto-seed FROM fields on create ──
+  const businessSeeded = useRef(false);
+  useEffect(() => {
+    if (businessSeeded.current || isEdit || !businessData?.business) return;
+    businessSeeded.current = true;
+    const b = businessData.business;
+    setValue("fromName", b.name ?? "");
+    const addr = [b.address, b.city, b.country].filter(Boolean).join(", ");
+    setValue("fromAddress", addr);
+    setValue("fromGstin", b.gstNumber ?? "");
+    setValue("fromPan", b.panNumber ?? "");
+  }, [businessData, isEdit, setValue]);
+
+  // ── Populate business details modal fields when it opens ──
+  useEffect(() => {
+    if (!businessDetailsOpen || !businessData?.business) return;
+    const b = businessData.business;
+    setBdName(b.name ?? "");
+    setBdCountry(b.country ?? "India");
+    setBdCity(b.city ?? "");
+    setBdAddress(b.address ?? "");
+    setBdGstin(b.gstNumber ?? "");
+    setBdPan(b.panNumber ?? "");
+    setBdPhone(b.phone ?? "");
+    setBdWebsite(b.website ?? "");
+  }, [businessDetailsOpen, businessData]);
+
+  const handleBusinessDetailsSave = async () => {
+    if (!bdName.trim()) {
+      toast.error("Business name is required");
+      return;
+    }
+    setBdSaving(true);
+    try {
+      const res = await fetch("/api/business", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: bdName,
+          country: bdCountry,
+          city: bdCity || null,
+          address: bdAddress || null,
+          gstNumber: bdGstin || null,
+          hasGst: !!bdGstin,
+          panNumber: bdPan || null,
+          phone: bdPhone || null,
+          website: bdWebsite || null,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to save");
+
+      const b: BusinessProfile = body.business;
+      qc.invalidateQueries({ queryKey: ["business"] });
+
+      // Update the current form's FROM fields
+      setValue("fromName", b.name ?? "");
+      const addr = [b.address, b.city, b.country].filter(Boolean).join(", ");
+      setValue("fromAddress", addr);
+      setValue("fromGstin", b.gstNumber ?? "");
+      setValue("fromPan", b.panNumber ?? "");
+
+      if (bdUpdatePrevious) {
+        // Notify — bulk updating past documents is a server-side job
+        toast.info("Previous document update is coming soon.");
+      }
+
+      setBusinessDetailsOpen(false);
+      toast.success("Business details saved");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setBdSaving(false);
+    }
+  };
+
   // ── Warehouse select → auto-fill shipping address ──
   const handleWarehouseSelect = (warehouseId: string) => {
     setValue("shipFromWarehouseId", warehouseId);
@@ -624,6 +757,24 @@ export function QuotationForm({
   const watchedLogo = watch("logo");
   const watchedSignature = watch("signature");
   const watchedAttachments = watch("attachments") ?? [];
+  const watchedFromName = watch("fromName");
+  const watchedFromAddress = watch("fromAddress");
+
+  const businessProfile = businessData?.business;
+  const fromDisplayName =
+    watchedFromName?.trim() || businessProfile?.name || "Your business";
+
+  const fromDisplayLocation = useMemo(() => {
+    if (watchedFromAddress?.trim()) {
+      const parts = watchedFromAddress.split(",").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 2) return parts.slice(-2).join(", ");
+      if (parts.length === 1) return parts[0];
+    }
+    if (businessProfile?.city && businessProfile?.country) {
+      return `${businessProfile.city}, ${businessProfile.country}`;
+    }
+    return businessProfile?.country ?? "";
+  }, [businessProfile, watchedFromAddress]);
 
   return (
     <div className="bg-zinc-50 pb-32">
@@ -672,6 +823,39 @@ export function QuotationForm({
           }}
         />
       </Modal>
+
+      <BusinessDetailsModal
+        open={businessDetailsOpen}
+        onClose={() => setBusinessDetailsOpen(false)}
+        onSave={handleBusinessDetailsSave}
+        saving={bdSaving}
+        name={bdName}
+        onNameChange={setBdName}
+        country={bdCountry}
+        onCountryChange={setBdCountry}
+        city={bdCity}
+        onCityChange={setBdCity}
+        address={bdAddress}
+        onAddressChange={setBdAddress}
+        gstin={bdGstin}
+        onGstinChange={setBdGstin}
+        pan={bdPan}
+        onPanChange={setBdPan}
+        phone={bdPhone}
+        onPhoneChange={setBdPhone}
+        website={bdWebsite}
+        onWebsiteChange={setBdWebsite}
+        taxOpen={bdTaxOpen}
+        onTaxOpenChange={setBdTaxOpen}
+        addrOpen={bdAddrOpen}
+        onAddrOpenChange={setBdAddrOpen}
+        moreOpen={bdMoreOpen}
+        onMoreOpenChange={setBdMoreOpen}
+        updatePrevious={bdUpdatePrevious}
+        onUpdatePreviousChange={setBdUpdatePrevious}
+        updateFuture={bdUpdateFuture}
+        onUpdateFutureChange={setBdUpdateFuture}
+      />
 
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
         {/* ═══════════════════════════════════════════════
@@ -877,49 +1061,47 @@ export function QuotationForm({
             SECTION 2 — QUOTATION FROM / FOR
         ═══════════════════════════════════════════════ */}
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* FROM */}
+          {/* FROM — Refrens-style card with Edit */}
           <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-100">
-            <div className="flex items-center gap-2 mb-4">
-              <Building2 className="size-4 text-zinc-400" />
-              <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} From</h3>
-              <span className="text-xs text-zinc-400">(Your Details)</span>
+            <div className="mb-4 border-b border-dotted border-zinc-300 pb-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="size-4 text-zinc-400" />
+                <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} From</h3>
+                <span className="text-xs text-zinc-400">(Your Details)</span>
+              </div>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className={labelCls}>Business Name</label>
-                <input
-                  {...register("fromName")}
-                  placeholder="Your business name"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Address</label>
-                <textarea
-                  {...register("fromAddress")}
-                  placeholder="Full address"
-                  rows={2}
-                  className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-[#7438dc] transition-colors resize-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>GSTIN</label>
-                  <input
-                    {...register("fromGstin")}
-                    placeholder="GST number"
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>PAN</label>
-                  <input
-                    {...register("fromPan")}
-                    placeholder="PAN number"
-                    className={inputCls}
-                  />
-                </div>
-              </div>
+
+            {/* Hidden fields — values submitted with the form */}
+            <input type="hidden" {...register("fromName")} />
+            <input type="hidden" {...register("fromAddress")} />
+            <input type="hidden" {...register("fromGstin")} />
+            <input type="hidden" {...register("fromPan")} />
+
+            {/* Business selector (single business for now) */}
+            <div className="mb-3 flex h-9 items-center gap-2 rounded-md border border-zinc-200 bg-white px-3">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded bg-zinc-100 text-xs font-semibold text-zinc-500">
+                {(fromDisplayName.charAt(0) || "B").toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm text-zinc-900">
+                {fromDisplayName}
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-zinc-400" />
+            </div>
+
+            {/* Details card */}
+            <div className="relative rounded-lg border border-zinc-200 bg-zinc-50/50 p-4">
+              <button
+                type="button"
+                onClick={() => setBusinessDetailsOpen(true)}
+                className="absolute right-3 top-3 flex items-center gap-1 text-sm font-medium text-[#7438dc] hover:underline"
+              >
+                <Pencil className="size-3.5" />
+                Edit
+              </button>
+              <p className="pr-16 text-sm font-semibold text-zinc-900">{fromDisplayName}</p>
+              {fromDisplayLocation && (
+                <p className="mt-0.5 text-sm text-zinc-600">{fromDisplayLocation}</p>
+              )}
             </div>
           </div>
 

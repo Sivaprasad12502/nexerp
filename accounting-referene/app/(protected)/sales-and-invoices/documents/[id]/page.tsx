@@ -30,7 +30,10 @@ import type { QuotationSettings } from "@/lib/validations/quotation";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 import { ActionMenu } from "../../clients-prospects/components/action-menu";
 import { EmailDocumentSheet } from "../components/email-document-sheet";
-import { DOCUMENT_TYPE_LABEL, type DocumentTypeValue } from "@/lib/validations/document";
+import {
+  DOCUMENT_TYPE_LABEL,
+  type DocumentTypeValue,
+} from "@/lib/validations/document";
 import {
   RecordPaymentModal,
   type PendingPayment,
@@ -45,8 +48,8 @@ function DocumentStatusBadge({ status }: { status: string }) {
     status === "ISSUED"
       ? "bg-emerald-100 text-emerald-700"
       : status === "CANCELLED"
-      ? "bg-zinc-100 text-zinc-500"
-      : "bg-amber-100 text-amber-700";
+        ? "bg-zinc-100 text-zinc-500"
+        : "bg-amber-100 text-amber-700";
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}
@@ -83,7 +86,9 @@ export default function DocumentViewPage({
 
   // ── Payment state ──
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(
+    null,
+  );
 
   // Fetch payments for this document (enabled only for invoices)
   const isInvoice = data?.document?.type === "INVOICE";
@@ -122,8 +127,9 @@ export default function DocumentViewPage({
   };
 
   // ── Local design state (seeded once from the fetched doc) ──
-  const [localSettings, setLocalSettings] =
-    useState<QuotationSettings>(DEFAULT_QUOTATION_SETTINGS);
+  const [localSettings, setLocalSettings] = useState<QuotationSettings>(
+    DEFAULT_QUOTATION_SETTINGS,
+  );
   const [localBs, setLocalBs] = useState<BusinessSettingsRow>({});
   const [emailSheetOpen, setEmailSheetOpen] = useState(false);
 
@@ -147,7 +153,9 @@ export default function DocumentViewPage({
   }, [bsData]);
 
   // ── Persist document settings (debounced) ──
-  const persistSettingsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistSettingsTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const persistSettings = useMutation({
     mutationFn: (s: QuotationSettings) =>
       fetch(`/api/documents/${id}`, {
@@ -263,8 +271,14 @@ export default function DocumentViewPage({
   // ── Reflect selected bank/UPI from bank-details step into the preview ──
   const effectiveBs = (() => {
     const allAccounts = paymentAccountsData?.accounts ?? [];
-    const selectedBankId = docSettings.selectedPaymentAccountId as string | null | undefined;
-    const selectedUpiId = docSettings.selectedUpiAccountId as string | null | undefined;
+    const selectedBankId = docSettings.selectedPaymentAccountId as
+      | string
+      | null
+      | undefined;
+    const selectedUpiId = docSettings.selectedUpiAccountId as
+      | string
+      | null
+      | undefined;
     const bankAcct = selectedBankId
       ? allAccounts.find((a) => a.id === selectedBankId)
       : null;
@@ -277,10 +291,14 @@ export default function DocumentViewPage({
       ...(bankAcct
         ? {
             bankName: bankAcct.bankName ?? localBs.bankName,
-            bankAccountName: bankAcct.accountHolderName ?? localBs.bankAccountName,
-            bankAccountNumber: bankAcct.accountNumber ?? localBs.bankAccountNumber,
+            bankAccountName:
+              bankAcct.accountHolderName ?? localBs.bankAccountName,
+            bankAccountNumber:
+              bankAcct.accountNumber ?? localBs.bankAccountNumber,
             bankIfsc: bankAcct.ifsc ?? localBs.bankIfsc,
-            bankSwift: (bankAcct as { swift?: string | null }).swift ?? localBs.bankSwift,
+            bankSwift:
+              (bankAcct as { swift?: string | null }).swift ??
+              localBs.bankSwift,
           }
         : {}),
       ...(upiAcct
@@ -315,8 +333,8 @@ export default function DocumentViewPage({
     { label: "Send Via Email", onClick: () => setEmailSheetOpen(true) },
   ];
 
-  const clientEmail =
-    (doc as { client?: { email?: string | null } | null })?.client?.email;
+  const clientEmail = (doc as { client?: { email?: string | null } | null })
+    ?.client?.email;
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50">
@@ -378,53 +396,59 @@ export default function DocumentViewPage({
         </div>
 
         {/* 3-step indicator */}
-        <div className="mx-auto mt-3 flex max-w-[1400px] items-center gap-3 text-sm">
-          {/* Step 1 — done */}
-          <div className="flex items-center gap-2">
-            <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
-              <Check className="size-3" />
-            </span>
-            <span className="text-sm font-medium text-zinc-500 underline underline-offset-2">
-              Add {typeLabel} Details
-            </span>
-          </div>
-          <ChevronRight className="size-4 text-zinc-300" />
-          {/* Step 2 — clickable */}
-          <button
-            type="button"
-            onClick={() => router.push(`/sales-and-invoices/documents/${id}/bank-details`)}
-            className="flex flex-col items-start group"
-          >
+        {isInvoice && (
+          <div className="mx-auto mt-3 flex max-w-[1400px] items-center gap-3 text-sm">
+            {/* Step 1 — done */}
             <div className="flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full border-2 border-zinc-300 text-xs font-semibold text-zinc-400 group-hover:border-[#7438dc] group-hover:text-[#7438dc]">
-                2
+              <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+                <Check className="size-3" />
               </span>
-              <span className="text-sm font-medium text-zinc-500 underline underline-offset-2 group-hover:text-[#7438dc]">
-                Add Bank &amp; UPI Details
+              <span className="text-sm font-medium text-zinc-500 underline underline-offset-2">
+                Add {typeLabel} Details
               </span>
             </div>
-            <span className="ml-7 text-xs text-zinc-400">Optional</span>
-          </button>
-          <ChevronRight className="size-4 text-zinc-300" />
-          {/* Step 3 — active */}
-          <div className="flex flex-col items-start">
-            <div className="flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full bg-[#7438dc] text-xs font-bold text-white">
-                3
-              </span>
-              <span className="text-sm font-semibold text-zinc-900">
-                Customise &amp; Share
-              </span>
+            <ChevronRight className="size-4 text-zinc-300" />
+            {/* Step 2 — clickable */}
+            <button
+              type="button"
+              onClick={() =>
+                router.push(`/sales-and-invoices/documents/${id}/bank-details`)
+              }
+              className="flex flex-col items-start group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex size-5 items-center justify-center rounded-full border-2 border-zinc-300 text-xs font-semibold text-zinc-400 group-hover:border-[#7438dc] group-hover:text-[#7438dc]">
+                  2
+                </span>
+                <span className="text-sm font-medium text-zinc-500 underline underline-offset-2 group-hover:text-[#7438dc]">
+                  Add Bank &amp; UPI Details
+                </span>
+              </div>
+              <span className="ml-7 text-xs text-zinc-400">Optional</span>
+            </button>
+            <ChevronRight className="size-4 text-zinc-300" />
+            {/* Step 3 — active */}
+            <div className="flex flex-col items-start">
+              <div className="flex items-center gap-2">
+                <span className="flex size-5 items-center justify-center rounded-full bg-[#7438dc] text-xs font-bold text-white">
+                  3
+                </span>
+                <span className="text-sm font-semibold text-zinc-900">
+                  Customise &amp; Share
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Action toolbar */}
         <div className="mx-auto mt-3 flex max-w-[1400px] flex-wrap items-center gap-2">
           {/* Edit */}
           <button
             type="button"
-            onClick={() => router.push(`/sales-and-invoices/documents/${id}/edit`)}
+            onClick={() =>
+              router.push(`/sales-and-invoices/documents/${id}/edit`)
+            }
             className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
           >
             <Pencil className="size-4" />

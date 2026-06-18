@@ -5,6 +5,10 @@ import { getRbacContext } from "@/lib/rbac";
 import { documentUpdateSchema, type DocumentUpdateInput } from "@/lib/validations/document";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
 import type { QuotationItemInput } from "@/lib/validations/quotation";
+import {
+  isQuotationFormPayload,
+  quotationFormToDocumentUpdate,
+} from "@/lib/document-adapter";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -63,7 +67,10 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const body = await req.json().catch(() => null);
+  const rawBody = await req.json().catch(() => null);
+  const body = isQuotationFormPayload(rawBody)
+    ? quotationFormToDocumentUpdate(rawBody)
+    : rawBody;
   const result = documentUpdateSchema.safeParse(body);
   if (!result.success) {
     return NextResponse.json({ error: result.error.flatten().fieldErrors }, { status: 400 });

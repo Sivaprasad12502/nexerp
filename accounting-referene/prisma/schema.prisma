@@ -38,6 +38,9 @@ model Business {
   website     String?
   phone       String?
   country     String   @default("India")
+  city        String?
+  address     String?
+  panNumber   String?
   currency    String   @default("Indian Rupee(INR, ₹)")
   hasGst      Boolean  @default(false)
   gstNumber   String?

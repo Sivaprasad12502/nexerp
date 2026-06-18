@@ -56,8 +56,21 @@ import { quotationItemSchema, additionalChargeSchema, customFieldSchema } from "
 export const documentUpdateSchema = z.object({
   title: z.string().trim().max(300).optional().or(z.literal("")),
   documentNumber: z.string().trim().min(1).max(80).optional(),
-  documentDate: z.string().datetime().optional(),
-  validTillDate: z.string().datetime().optional().nullable(),
+  documentDate: z
+    .union([
+      z.string().datetime(),
+      z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    ])
+    .optional(),
+  validTillDate: z
+    .union([
+      z.string().datetime(),
+      z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      z.literal(""),
+      z.null(),
+    ])
+    .optional()
+    .transform((v) => (v === "" ? null : v)),
   subtitle: z.string().trim().max(500).optional().or(z.literal("")),
   logo: z.string().optional().or(z.literal("")),
   currency: z.string().trim().max(50).optional(),
@@ -80,7 +93,14 @@ export const documentUpdateSchema = z.object({
   customFields: z.array(customFieldSchema).optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
   items: z.array(quotationItemSchema).optional(),
-  status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).optional(),
+  status: z
+    .enum(["DRAFT", "ISSUED", "CANCELLED", "SAVED", "SENT", "APPROVED"])
+    .optional()
+    .transform((s) => {
+      if (!s) return undefined;
+      if (s === "SAVED" || s === "SENT" || s === "APPROVED") return "ISSUED" as const;
+      return s as "DRAFT" | "ISSUED" | "CANCELLED";
+    }),
 });
 
 export type DocumentUpdateInput = z.infer<typeof documentUpdateSchema>;

@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, Loader2 } from "lucide-react";
 
 import { useDocument } from "@/lib/hooks/use-documents";
-import { adaptDocumentToQuotationRow } from "@/lib/document-adapter";
+import {
+  adaptDocumentToQuotationRow,
+  getDocumentEditFormConfig,
+} from "@/lib/document-adapter";
 import { QuotationForm } from "../../../quotation-estimates/components/quotation-form";
 import { DOCUMENT_TYPE_LABEL, type DocumentTypeValue } from "@/lib/validations/document";
 
@@ -46,14 +49,7 @@ export default function EditDocumentPage({
   const typeLabel =
     DOCUMENT_TYPE_LABEL[doc.type as DocumentTypeValue] ?? doc.type;
   const adapted = adaptDocumentToQuotationRow(doc, typeLabel);
-
-  const editConfig = {
-    updateEndpoint: (docId: string) => `/api/documents/${docId}`,
-    invalidateKey: "documents",
-    titleFallback: typeLabel,
-    resourceLabel: typeLabel,
-    responseKey: "document",
-  } as const;
+  const editConfig = getDocumentEditFormConfig(doc);
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50 pb-10">
