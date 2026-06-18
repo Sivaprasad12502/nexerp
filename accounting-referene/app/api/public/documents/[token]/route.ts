@@ -68,5 +68,7 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     },
     isAccepted: Boolean(soConversion),
     salesOrderId: soConversion?.targetId ?? null,
+    vendorEmail:
+      (typeof settings.vendorEmail === "string" ? settings.vendorEmail : null) ?? null,
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,6 +25,12 @@ import { useSession } from "next-auth/react";
 
 import { OnboardingHeader } from "@/components/onboarding/onboarding-header";
 import { businessSchema, type BusinessInput } from "@/lib/validations/business";
+import {
+  clearDocumentAuthContext,
+  isPublicDocumentCallback,
+  persistDocumentAuthContext,
+  resolveAuthCallback,
+} from "@/lib/public-auth-flow";
 
 const PURPLE = "#6d3bd6";
 
@@ -39,9 +45,20 @@ const categories: { title: string; desc: string; icon: LucideIcon }[] = [
   { title: "Something else", desc: "My business is different.", icon: Sparkles },
 ];
 
-const OnBoardingBusiness = () => {
+const OnBoardingBusinessInner = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawCallback = searchParams.get("callbackUrl");
+  const resolvedCallback = resolveAuthCallback(rawCallback);
+  const callbackUrl = resolvedCallback ?? "/dashboard";
+  const fromDocument = isPublicDocumentCallback(resolvedCallback);
   const { update: updateSession } = useSession();
+
+  useEffect(() => {
+    if (rawCallback) {
+      persistDocumentAuthContext(rawCallback, null);
+    }
+  }, [rawCallback]);
   const [step, setStep] = useState<1 | 2>(1);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -91,12 +108,20 @@ const OnBoardingBusiness = () => {
     }
 
     await updateSession();
-    router.push("/dashboard");
+    clearDocumentAuthContext();
+    router.push(callbackUrl);
+    router.refresh();
   };
 
   return (
     <div className="min-h-screen bg-[#f6f6f8]">
       <OnboardingHeader />
+
+      {fromDocument && (
+        <p className="mx-auto max-w-md px-4 pt-4 text-center text-sm text-zinc-600">
+          Complete setup to accept your document.
+        </p>
+      )}
 
       {/* Stepper */}
       <div className="mx-auto flex max-w-md items-center justify-center gap-3 px-4 py-6 sm:py-8">
@@ -699,5 +724,11 @@ function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
     </button>
   );
 }
+
+const OnBoardingBusiness = () => (
+  <Suspense fallback={<div className="flex min-h-screen items-center justify-center" />}>
+    <OnBoardingBusinessInner />
+  </Suspense>
+);
 
 export default OnBoardingBusiness;

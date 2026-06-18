@@ -24,6 +24,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNextDocumentNumber } from "@/lib/hooks/use-sales-orders";
+import { redirectToAuth } from "@/lib/public-auth-flow";
 
 type PublicDocument = {
   id: string;
@@ -166,8 +167,10 @@ export default function PublicSalesOrderPage() {
 
   const startAcceptFlow = () => {
     if (sessionStatus !== "authenticated") {
-      const callbackUrl = encodeURIComponent(`/sales-order/${token}`);
-      router.push(`/login?callbackUrl=${callbackUrl}`);
+      redirectToAuth(router, {
+        callbackPath: `/sales-order/${token}`,
+        email: data?.clientEmail,
+      });
       return;
     }
     setModalStep("confirm");
@@ -352,7 +355,7 @@ export default function PublicSalesOrderPage() {
 
         {!effectiveAccepted && sessionStatus === "unauthenticated" && (
           <p className="mt-3 text-center text-xs text-zinc-400">
-            You will be prompted to sign in before accepting.
+            You will be prompted to sign in or create an account before accepting.
           </p>
         )}
       </div>

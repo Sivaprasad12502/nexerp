@@ -1,23 +1,40 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
+import { toast } from "sonner";
 
 import { GoogleIcon } from "@/components/auth/google-icon";
 import { loginSchema, type LoginInput } from "@/lib/validations/login";
-import { toast } from "sonner";
-
-// ─── Inner component reads searchParams (must be inside <Suspense> in Next 16) ─
+import {
+  buildRegisterUrl,
+  clearDocumentAuthContext,
+  isPublicDocumentCallback,
+  persistDocumentAuthContext,
+  resolveAuthCallback,
+  resolveAuthEmail,
+} from "@/lib/public-auth-flow";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/business-new";
+  const rawCallback = searchParams.get("callbackUrl");
+  const rawEmail = searchParams.get("email");
+  const resolvedCallback = resolveAuthCallback(rawCallback);
+  const loginRedirectTarget = resolvedCallback ?? "/business-new";
+  const emailParam = resolveAuthEmail(rawEmail) ?? "";
+  const linkCallback = resolvedCallback ?? "/business-new";
+
+  useEffect(() => {
+    if (rawCallback || rawEmail) {
+      persistDocumentAuthContext(rawCallback, rawEmail);
+    }
+  }, [rawCallback, rawEmail]);
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -28,7 +45,7 @@ function LoginForm() {
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "" },
+    defaultValues: { email: emailParam },
   });
 
   const onSubmit = async (data: LoginInput) => {
@@ -45,9 +62,14 @@ function LoginForm() {
     }
 
     toast.success("Logged in successfully!");
-    router.push(callbackUrl);
+    if (isPublicDocumentCallback(resolvedCallback)) {
+      clearDocumentAuthContext();
+    }
+    router.push(loginRedirectTarget);
     router.refresh();
   };
+
+  const fromDocument = isPublicDocumentCallback(resolvedCallback);
 
   return (
     <div className="mx-auto w-full max-w-115 px-6 pb-24 pt-10">
@@ -55,9 +77,15 @@ function LoginForm() {
         Login to your Refrens account
       </h1>
 
+      {fromDocument && (
+        <p className="mt-3 text-center text-sm text-zinc-600">
+          Sign in to view and accept this document.
+        </p>
+      )}
+
       <button
         type="button"
-        onClick={() => signIn("google", { callbackUrl })}
+        onClick={() => signIn("google", { callbackUrl: loginRedirectTarget })}
         className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
       >
         <GoogleIcon className="size-5" />
@@ -77,7 +105,6 @@ function LoginForm() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        {/* Email */}
         <div className="space-y-1.5">
           <label htmlFor="email" className="block text-sm font-medium text-zinc-800">
             Email<span className="text-red-500">*</span>
@@ -95,7 +122,6 @@ function LoginForm() {
           )}
         </div>
 
-        {/* Password */}
         <div className="space-y-1.5">
           <label htmlFor="password" className="block text-sm font-medium text-zinc-800">
             Password<span className="text-red-500">*</span>
@@ -152,15 +178,21 @@ function LoginForm() {
       </p>
       <p className="mt-3 text-center text-sm text-zinc-700">
         Don&apos;t have an account?{" "}
-        <Link href="/register" className="font-medium text-[#7c3aed] hover:underline">
+        <Link
+          href={buildRegisterUrl(linkCallback, emailParam || undefined)}
+          className="font-medium text-[#7c3aed] hover:underline"
+        >
           Sign up now
         </Link>
       </p>
+      {fromDocument && (
+        <p className="mt-2 text-center text-xs text-zinc-500">
+          Create an account to continue accepting this document.
+        </p>
+      )}
     </div>
   );
 }
-
-// ─── Page export — wraps in Suspense (required for useSearchParams in Next 16) ─
 
 const Login = () => (
   <Suspense fallback={<div className="flex min-h-screen items-center justify-center" />}>

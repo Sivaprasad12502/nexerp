@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { Navbar } from "@/components/navbar";
+import { PublicLayoutShell } from "@/components/public-layout-shell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,10 +23,5 @@ export default function PublicLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <>
-      <Navbar />
-      {children}
-    </>
-  );
+  return <PublicLayoutShell>{children}</PublicLayoutShell>;
 }

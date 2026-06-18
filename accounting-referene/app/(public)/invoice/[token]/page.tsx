@@ -28,6 +28,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNextDocumentNumber } from "@/lib/hooks/use-sales-orders";
+import { redirectToAuth } from "@/lib/public-auth-flow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -262,8 +263,10 @@ export default function PublicInvoicePage() {
   // ── Handlers ───────────────────────────────────────────────────────────────
   const startAcceptFlow = () => {
     if (sessionStatus !== "authenticated") {
-      const callbackUrl = encodeURIComponent(`/invoice/${token}`);
-      router.push(`/login?callbackUrl=${callbackUrl}`);
+      redirectToAuth(router, {
+        callbackPath: `/invoice/${token}`,
+        email: data?.recipientEmail,
+      });
       return;
     }
     setModalStep("confirm");
@@ -550,7 +553,7 @@ export default function PublicInvoicePage() {
 
         {showAcceptReject && sessionStatus === "unauthenticated" && (
           <p className="mt-3 text-center text-xs text-zinc-400">
-            You will be prompted to sign in before accepting.
+            You will be prompted to sign in or create an account before accepting.
           </p>
         )}
       </div>

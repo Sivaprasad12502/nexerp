@@ -20,6 +20,7 @@ import { QuotationPreview } from "@/app/(protected)/sales-and-invoices/quotation
 import type { BusinessSettingsRow } from "@/app/(protected)/sales-and-invoices/quotation-estimates/components/quotation-preview";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 import { adaptDocumentToQuotationRow } from "@/lib/document-adapter";
+import { redirectToAuth } from "@/lib/public-auth-flow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ type ApiResponse = {
   document: PublicDocument;
   isAccepted: boolean;
   salesOrderId: string | null;
+  vendorEmail: string | null;
 };
 
 type AcceptResponse = {
@@ -157,8 +159,10 @@ export default function PublicPurchaseOrderPage() {
 
   const handleAccept = () => {
     if (sessionStatus !== "authenticated") {
-      const callbackUrl = encodeURIComponent(`/purchase-order/${token}?action=accept`);
-      router.push(`/login?callbackUrl=${callbackUrl}`);
+      redirectToAuth(router, {
+        callbackPath: `/purchase-order/${token}?action=accept`,
+        email: data?.vendorEmail,
+      });
       return;
     }
     acceptMutation.mutate();
@@ -345,7 +349,7 @@ export default function PublicPurchaseOrderPage() {
 
         {!effectiveAccepted && sessionStatus === "unauthenticated" && (
           <p className="mt-3 text-center text-xs text-zinc-400">
-            You will be prompted to sign in before accepting.
+            You will be prompted to sign in or create an account before accepting.
           </p>
         )}
       </div>

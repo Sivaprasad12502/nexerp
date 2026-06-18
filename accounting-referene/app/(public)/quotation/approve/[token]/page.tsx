@@ -24,6 +24,7 @@ import type { QuotationRow } from "@/app/(protected)/sales-and-invoices/quotatio
 import type { BusinessSettingsRow } from "@/app/(protected)/sales-and-invoices/quotation-estimates/components/quotation-preview";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 import type { QuotationSettings } from "@/lib/validations/quotation";
+import { redirectToAuth } from "@/lib/public-auth-flow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -254,8 +255,10 @@ export default function QuotationApprovePage() {
 
   const handleActionClick = (action: "approve" | "reject" | "convert-po") => {
     if (sessionStatus !== "authenticated") {
-      const callbackUrl = encodeURIComponent(`/quotation/approve/${token}`);
-      router.push(`/login?callbackUrl=${callbackUrl}`);
+      redirectToAuth(router, {
+        callbackPath: `/quotation/approve/${token}`,
+        email: data?.clientEmail,
+      });
       return;
     }
     if (action === "approve") {
@@ -462,7 +465,7 @@ export default function QuotationApprovePage() {
 
         {sessionStatus === "unauthenticated" && (isPending || canConvertPo) && (
           <p className="mt-3 text-center text-xs text-zinc-400">
-            You will be prompted to sign in before taking action.
+            You will be prompted to sign in or create an account before taking action.
           </p>
         )}
       </div>
