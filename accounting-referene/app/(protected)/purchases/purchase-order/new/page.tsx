@@ -11,6 +11,7 @@ const PO_CONFIG = {
   titleFallback: "Purchase Order",
   resourceLabel: "Purchase Order",
   responseKey: "document",
+  partyType: "vendor",
 } as const;
 
 export default function NewPurchaseOrderPage() {

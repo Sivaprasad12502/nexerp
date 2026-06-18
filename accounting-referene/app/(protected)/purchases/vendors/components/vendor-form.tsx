@@ -134,7 +134,7 @@ function Section({ title, badge, optional, open, onToggle, children }: SectionPr
         onClick={onToggle}
         className="flex w-full items-center justify-between px-6 py-4 text-left"
       >
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 ">
           <span className="text-base font-semibold text-zinc-800">{title}</span>
           {badge !== undefined && (
             <span className="flex size-6 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-700">

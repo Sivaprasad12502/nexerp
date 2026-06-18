@@ -36,6 +36,7 @@ import {
   type PendingPayment,
   type InvoiceSummary,
 } from "../components/record-payment-modal";
+import { usePaymentAccounts } from "@/lib/hooks/use-payment-accounts";
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -76,6 +77,9 @@ export default function DocumentViewPage({
     queryKey: ["business-settings"],
     queryFn: () => fetch("/api/business-settings").then((r) => r.json()),
   });
+
+  // Payment accounts (for bank/UPI selection reflection)
+  const { data: paymentAccountsData } = usePaymentAccounts();
 
   // ── Payment state ──
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -256,6 +260,37 @@ export default function DocumentViewPage({
     currency: doc.currency,
   };
 
+  // ── Reflect selected bank/UPI from bank-details step into the preview ──
+  const effectiveBs = (() => {
+    const allAccounts = paymentAccountsData?.accounts ?? [];
+    const selectedBankId = docSettings.selectedPaymentAccountId as string | null | undefined;
+    const selectedUpiId = docSettings.selectedUpiAccountId as string | null | undefined;
+    const bankAcct = selectedBankId
+      ? allAccounts.find((a) => a.id === selectedBankId)
+      : null;
+    const upiAcct = selectedUpiId
+      ? allAccounts.find((a) => a.id === selectedUpiId)
+      : null;
+    if (!bankAcct && !upiAcct) return localBs;
+    return {
+      ...localBs,
+      ...(bankAcct
+        ? {
+            bankName: bankAcct.bankName ?? localBs.bankName,
+            bankAccountName: bankAcct.accountHolderName ?? localBs.bankAccountName,
+            bankAccountNumber: bankAcct.accountNumber ?? localBs.bankAccountNumber,
+            bankIfsc: bankAcct.ifsc ?? localBs.bankIfsc,
+            bankSwift: (bankAcct as { swift?: string | null }).swift ?? localBs.bankSwift,
+          }
+        : {}),
+      ...(upiAcct
+        ? {
+            upiId: upiAcct.upiId ?? localBs.upiId,
+          }
+        : {}),
+    };
+  })();
+
   // ── Share actions ──
   const shareActions = [
     {
@@ -342,35 +377,55 @@ export default function DocumentViewPage({
           </div>
         </div>
 
-        {/* Step indicator */}
-        <div className="mx-auto mt-3 flex max-w-[1400px] items-center gap-3">
+        {/* 3-step indicator */}
+        <div className="mx-auto mt-3 flex max-w-[1400px] items-center gap-3 text-sm">
+          {/* Step 1 — done */}
           <div className="flex items-center gap-2">
             <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
               <Check className="size-3" />
             </span>
-            <span className="text-sm font-medium text-zinc-500">
+            <span className="text-sm font-medium text-zinc-500 underline underline-offset-2">
               Add {typeLabel} Details
             </span>
           </div>
           <ChevronRight className="size-4 text-zinc-300" />
-          <div className="flex items-center gap-2">
-            <span className="flex size-5 items-center justify-center rounded-full bg-[#7438dc] text-xs font-bold text-white">
-              2
-            </span>
-            <span className="text-sm font-semibold text-zinc-900">
-              Customise &amp; Share
-            </span>
+          {/* Step 2 — clickable */}
+          <button
+            type="button"
+            onClick={() => router.push(`/sales-and-invoices/documents/${id}/bank-details`)}
+            className="flex flex-col items-start group"
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex size-5 items-center justify-center rounded-full border-2 border-zinc-300 text-xs font-semibold text-zinc-400 group-hover:border-[#7438dc] group-hover:text-[#7438dc]">
+                2
+              </span>
+              <span className="text-sm font-medium text-zinc-500 underline underline-offset-2 group-hover:text-[#7438dc]">
+                Add Bank &amp; UPI Details
+              </span>
+            </div>
+            <span className="ml-7 text-xs text-zinc-400">Optional</span>
+          </button>
+          <ChevronRight className="size-4 text-zinc-300" />
+          {/* Step 3 — active */}
+          <div className="flex flex-col items-start">
+            <div className="flex items-center gap-2">
+              <span className="flex size-5 items-center justify-center rounded-full bg-[#7438dc] text-xs font-bold text-white">
+                3
+              </span>
+              <span className="text-sm font-semibold text-zinc-900">
+                Customise &amp; Share
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Action toolbar */}
         <div className="mx-auto mt-3 flex max-w-[1400px] flex-wrap items-center gap-2">
-          {/* Edit — stub */}
+          {/* Edit */}
           <button
             type="button"
-            disabled
-            title="Edit (coming soon)"
-            className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-400 opacity-50 cursor-not-allowed"
+            onClick={() => router.push(`/sales-and-invoices/documents/${id}/edit`)}
+            className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
           >
             <Pencil className="size-4" />
             <span>Edit</span>
@@ -459,7 +514,7 @@ export default function DocumentViewPage({
             <div className="quotation-print-area">
               <QuotationPreview
                 quotation={adapted}
-                businessSettings={localBs}
+                businessSettings={effectiveBs}
                 settings={localSettings}
                 documentLabel={typeLabel}
               />

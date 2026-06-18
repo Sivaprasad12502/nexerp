@@ -40,6 +40,10 @@ import {
   ClientForm,
   type ClientRow,
 } from "../../clients-prospects/components/client-form";
+import {
+  VendorForm,
+  type VendorRow,
+} from "../../../purchases/vendors/components/vendor-form";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -173,6 +177,8 @@ type SaveConfig = {
   resourceLabel?: string;
   /** Key on the API response body that holds the saved document. Default: "quotation" */
   responseKey?: string;
+  /** Party picker mode. "vendor" shows vendor selection for purchase orders. Default: "client" */
+  partyType?: "client" | "vendor";
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -198,11 +204,18 @@ export function QuotationForm({
     titleFallback: config?.titleFallback ?? "Quotation",
     resourceLabel: config?.resourceLabel ?? "Quotation",
     responseKey: config?.responseKey ?? "quotation",
+    partyType: config?.partyType ?? "client",
   };
+  const isVendor = cfg.partyType === "vendor";
   const qc = useQueryClient();
 
   // ── State ──
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
+  const [newVendorModalOpen, setNewVendorModalOpen] = useState(false);
+  const [selectedVendorId, setSelectedVendorId] = useState(
+    // Seed on edit: best-effort match (vendor data available after query loads)
+    "",
+  );
   const [logoUploading, setLogoUploading] = useState(false);
   const [signatureUploading, setSignatureUploading] = useState(false);
   const [showShipping, setShowShipping] = useState(
@@ -418,6 +431,13 @@ export function QuotationForm({
   const { data: clientsData } = useQuery<{ clients: ClientBasic[] }>({
     queryKey: ["clients", "ACTIVE"],
     queryFn: () => fetch("/api/clients?status=ACTIVE").then((r) => r.json()),
+    enabled: !isVendor,
+  });
+
+  const { data: vendorsData, refetch: refetchVendors } = useQuery<{ vendors: VendorRow[] }>({
+    queryKey: ["vendors", "ACTIVE"],
+    queryFn: () => fetch("/api/vendors?status=ACTIVE").then((r) => r.json()),
+    enabled: isVendor,
   });
 
   const { data: productsData } = useQuery<{ products: ProductBasic[] }>({
@@ -431,6 +451,7 @@ export function QuotationForm({
   });
 
   const clients = clientsData?.clients ?? [];
+  const vendors = vendorsData?.vendors ?? [];
   const products = productsData?.products ?? [];
   const warehouses = warehousesData?.warehouses ?? [];
 
@@ -551,6 +572,27 @@ export function QuotationForm({
     setValue("clientName", client?.businessName ?? "");
   };
 
+  // ── Vendor select ──
+  const selectVendor = (v: VendorRow) => {
+    setSelectedVendorId(v.id);
+    // Store vendor details in the client text fields (PO convention — no vendorId on Document)
+    setValue("clientName", v.name);
+    const addr =
+      v.address ??
+      [v.streetAddress, v.addressCity, v.state, v.postalCode]
+        .filter(Boolean)
+        .join(", ");
+    setValue("clientAddress", addr);
+    setValue("clientGstin", v.gstNumber ?? v.trn ?? "");
+    // Ensure clientId is empty (FK to Client, not Vendor)
+    setValue("clientId", "");
+  };
+
+  const handleVendorSelect = (vendorId: string) => {
+    const v = vendors.find((x) => x.id === vendorId);
+    if (v) selectVendor(v);
+  };
+
   // ── Warehouse select → auto-fill shipping address ──
   const handleWarehouseSelect = (warehouseId: string) => {
     setValue("shipFromWarehouseId", warehouseId);
@@ -607,6 +649,26 @@ export function QuotationForm({
                 setValue("clientId", id);
               }
             }, 600);
+          }}
+        />
+      </Modal>
+
+      {/* ── New Vendor Modal ── */}
+      <Modal
+        open={newVendorModalOpen}
+        onClose={() => setNewVendorModalOpen(false)}
+        title="Add New Vendor"
+        size="xl"
+      >
+        <VendorForm
+          onCancel={() => setNewVendorModalOpen(false)}
+          onSaved={async (id: string) => {
+            setNewVendorModalOpen(false);
+            qc.invalidateQueries({ queryKey: ["vendors"] });
+            // Refetch the vendors list, then auto-select the new vendor
+            const res = await refetchVendors();
+            const v = res.data?.vendors?.find((x) => x.id === id);
+            if (v) selectVendor(v);
           }}
         />
       </Modal>
@@ -867,32 +929,51 @@ export function QuotationForm({
               <FileText className="size-4 text-zinc-400" />
               <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} For</h3>
               <span className="text-xs text-zinc-400">
-                (Client&apos;s Details)
+                {isVendor ? "(Vendor’s Details)" : "(Client’s Details)"}
               </span>
             </div>
 
-            {/* Client picker */}
-            <div>
-              <label className={labelCls}>Select a Client</label>
-              <Controller
-                control={control}
-                name="clientId"
-                render={({ field }) => (
-                  <select
-                    value={field.value ?? ""}
-                    onChange={(e) => handleClientSelect(e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">— Select client —</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.businessName}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              />
-            </div>
+            {isVendor ? (
+              /* ── Vendor picker ── */
+              <div>
+                <label className={labelCls}>Select Vendor/Business from the list</label>
+                <select
+                  value={selectedVendorId}
+                  onChange={(e) => handleVendorSelect(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="">— Select vendor —</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              /* ── Client picker ── */
+              <div>
+                <label className={labelCls}>Select a Client</label>
+                <Controller
+                  control={control}
+                  name="clientId"
+                  render={({ field }) => (
+                    <select
+                      value={field.value ?? ""}
+                      onChange={(e) => handleClientSelect(e.target.value)}
+                      className={selectCls}
+                    >
+                      <option value="">— Select client —</option>
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.businessName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                />
+              </div>
+            )}
 
             <div className="my-3 flex items-center gap-2">
               <div className="h-px flex-1 bg-zinc-100" />
@@ -900,28 +981,44 @@ export function QuotationForm({
               <div className="h-px flex-1 bg-zinc-100" />
             </div>
 
-            <button
-              type="button"
-              onClick={() => setNewClientModalOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7438dc] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6330c2] transition-colors"
-            >
-              <Plus className="size-4" /> Add New Client
-            </button>
+            {isVendor ? (
+              <button
+                type="button"
+                onClick={() => setNewVendorModalOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7438dc] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6330c2] transition-colors"
+              >
+                <Plus className="size-4" /> Add New Vendor
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setNewClientModalOpen(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7438dc] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6330c2] transition-colors"
+              >
+                <Plus className="size-4" /> Add New Client
+              </button>
+            )}
 
-            {/* Client address preview */}
-            {watch("clientId") && (
+            {/* Address / GSTIN preview — shown after a party is selected */}
+            {(isVendor
+              ? selectedVendorId || watch("clientName")
+              : watch("clientId")) && (
               <div className="mt-4 space-y-3">
                 <div>
-                  <label className={labelCls}>Client Address</label>
+                  <label className={labelCls}>
+                    {isVendor ? "Vendor Address" : "Client Address"}
+                  </label>
                   <textarea
                     {...register("clientAddress")}
-                    placeholder="Client address"
+                    placeholder={isVendor ? "Vendor address" : "Client address"}
                     rows={2}
                     className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-[#7438dc] transition-colors resize-none"
                   />
                 </div>
                 <div>
-                  <label className={labelCls}>Client GSTIN / TRN</label>
+                  <label className={labelCls}>
+                    {isVendor ? "Vendor GSTIN / TRN" : "Client GSTIN / TRN"}
+                  </label>
                   <input
                     {...register("clientGstin")}
                     placeholder="Tax number"

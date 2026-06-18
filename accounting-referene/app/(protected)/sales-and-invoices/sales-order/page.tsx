@@ -100,6 +100,7 @@ function ConvertInvoiceFlow({
   so: SalesOrderRow | null;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [step, setStep] = useState<ConvertModalStep>("confirm");
   const convertMutation = useConvertSalesOrderToInvoice();
   const { data: nextNumberData } = useNextDocumentNumber("INVOICE");
@@ -108,7 +109,10 @@ function ConvertInvoiceFlow({
 
   const handleCreate = () => {
     convertMutation.mutate(so.id, {
-      onSuccess: () => onClose(),
+      onSuccess: (data) => {
+        onClose();
+        router.push(`/sales-and-invoices/documents/${data.document.id}`);
+      },
     });
   };
 

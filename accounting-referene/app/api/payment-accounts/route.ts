@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
       branch: data.branch ?? null,
       accountType: data.accountType ?? null,
       upiId: data.upiId ?? null,
+      country: data.country ?? null,
+      currency: data.currency ?? null,
+      swift: data.swift ?? null,
+      customFields: data.customFields ?? undefined,
+      linkedBankAccountId: data.linkedBankAccountId ?? null,
     },
   });
 
