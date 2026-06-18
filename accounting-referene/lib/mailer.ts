@@ -134,6 +134,56 @@ export async function sendInvitationEmail(args: InviteEmailArgs): Promise<boolea
   }
 }
 
+type PasswordResetEmailArgs = {
+  to: string;
+  resetUrl: string;
+  userName?: string | null;
+};
+
+/** Returns true if an email was actually dispatched. Never throws. */
+export async function sendPasswordResetEmail(
+  args: PasswordResetEmailArgs
+): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, resetUrl, userName } = args;
+  const greeting = userName ? `Hi ${userName},` : "Hi,";
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      subject: "Reset your Refrens password",
+      text:
+        `${greeting}\n\n` +
+        `We received a request to reset your Refrens password.\n\n` +
+        `Reset your password: ${resetUrl}\n\n` +
+        `This link expires in 1 hour. If you didn't request this, you can safely ignore this email.`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto">
+          <h2 style="color:#111">Reset your Refrens password</h2>
+          <p style="color:#444">${greeting}</p>
+          <p style="color:#444">We received a request to reset your password. Click the button below to choose a new one.</p>
+          <p style="margin:24px 0">
+            <a href="${resetUrl}"
+               style="background:#7438dc;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">
+              Reset Password
+            </a>
+          </p>
+          <p style="color:#888;font-size:13px">Or paste this link into your browser:<br>${resetUrl}</p>
+          <p style="color:#888;font-size:13px">This link expires in 1 hour.</p>
+          <p style="color:#aaa;font-size:12px;margin-top:16px">If you didn&apos;t request a password reset, you can safely ignore this email.</p>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    console.error("[mailer] failed to send password reset email", err);
+    return false;
+  }
+}
+
 // ─── Seller notification emails (quotation workflow) ─────────────────────────
 
 type SellerEventEmailArgs = {

@@ -26,6 +26,7 @@ model User {
   notifications        Notification[]
   documents            Document[]           @relation("DocumentCreator")
   documentConversions  DocumentConversion[] @relation("ConversionCreator")
+  passwordResetTokens  PasswordResetToken[]
 }
 
 model Business {
@@ -882,6 +883,20 @@ model DocumentConversion {
   // One conversion per (source, target type) — prevents duplicate invoices from the same quotation
   @@unique([sourceType, sourceId, targetType])
   @@index([businessId, sourceType, sourceId])
+}
+
+// ─── Password Reset Tokens ────────────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // ─── Payments ─────────────────────────────────────────────────────────────────

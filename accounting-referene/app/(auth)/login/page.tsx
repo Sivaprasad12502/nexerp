@@ -148,7 +148,7 @@ function LoginForm() {
             <p className="text-xs text-red-500">{errors.password.message}</p>
           )}
           <Link
-            href="#forgot"
+            href="/forgot-password"
             className="inline-block pt-1 text-sm text-zinc-500 hover:text-zinc-700"
           >
             Forgot password?
