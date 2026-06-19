@@ -5,17 +5,25 @@ import { getRbacContext } from "@/lib/rbac";
 import { quotationCreateSchema } from "@/lib/validations/quotation";
 import { DOCUMENT_TYPE_PREFIX } from "@/lib/validations/document";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
+import {
+  applyOutgoingStock,
+  InsufficientStockError,
+  resolveWarehouseId,
+} from "@/lib/inventory-stock";
 
 export async function GET() {
   const ctx = await getRbacContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ctx)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const documents = await prisma.document.findMany({
     where: { businessId: ctx.businessId, type: "SALES_ORDER" },
     orderBy: { createdAt: "desc" },
     include: {
       items: { orderBy: { sortOrder: "asc" } },
-      client: { select: { id: true, businessName: true, logo: true, email: true } },
+      client: {
+        select: { id: true, businessName: true, logo: true, email: true },
+      },
     },
   });
 
@@ -61,7 +69,9 @@ export async function GET() {
 
   const salesOrders = documents.map((doc) => {
     const conversion = conversionMap.get(doc.id);
-    const invoiceDoc = conversion ? invoiceDocMap.get(conversion.targetId) : null;
+    const invoiceDoc = conversion
+      ? invoiceDocMap.get(conversion.targetId)
+      : null;
     const poConversion = poConversionMap.get(doc.id);
     const clientName = doc.client?.businessName ?? doc.clientName ?? "";
     const settings =
@@ -69,7 +79,9 @@ export async function GET() {
         ? (doc.settings as Record<string, unknown>)
         : {};
     const clientEmail =
-      (typeof settings.clientEmail === "string" ? settings.clientEmail : null) ??
+      (typeof settings.clientEmail === "string"
+        ? settings.clientEmail
+        : null) ??
       doc.client?.email ??
       null;
 
@@ -100,7 +112,8 @@ export async function GET() {
       isConvertedToInvoice: Boolean(conversion),
       invoiceDocumentId: invoiceDoc?.id ?? null,
       invoiceDocumentNumber: invoiceDoc?.documentNumber ?? null,
-      isConvertedToPurchaseOrder: Boolean(poConversion) || settings.acceptanceStatus === "ACCEPTED",
+      isConvertedToPurchaseOrder:
+        Boolean(poConversion) || settings.acceptanceStatus === "ACCEPTED",
       purchaseOrderDocumentId: poConversion?.targetId ?? null,
       // Acceptance: the SO itself was created by the vendor accepting the PO —
       // so all SOs in this list are inherently "accepted". We flag Invoiced ones
@@ -118,7 +131,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const ctx = await getRbacContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ctx)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: unknown;
   try {
@@ -175,7 +189,9 @@ export async function POST(req: NextRequest) {
 
       // Map DocumentStatus: "SAVED" → "ISSUED", everything else → "DRAFT"
       const docStatus =
-        data.status === "SAVED" || data.status === "SENT" || data.status === "APPROVED"
+        data.status === "SAVED" ||
+        data.status === "SENT" ||
+        data.status === "APPROVED"
           ? ("ISSUED" as const)
           : ("DRAFT" as const);
 
@@ -183,15 +199,19 @@ export async function POST(req: NextRequest) {
       const ns = (v?: string | null) =>
         v === undefined || v === null || v.trim() === "" ? null : v.trim();
 
-      return tx.document.create({
+      const { businessId, userId } = ctx;
+
+      const doc = await tx.document.create({
         data: {
-          businessId: ctx.businessId,
+          businessId,
           type: "SALES_ORDER",
           documentNumber,
           documentDate: data.quotationDate
             ? new Date(data.quotationDate)
             : new Date(),
-          validTillDate: data.validTillDate ? new Date(data.validTillDate) : null,
+          validTillDate: data.validTillDate
+            ? new Date(data.validTillDate)
+            : null,
           title: ns(data.quotationTitle),
           subtitle: ns(data.subtitle),
           logo: ns(data.logo),
@@ -233,7 +253,7 @@ export async function POST(req: NextRequest) {
           customFields: data.customFields ?? [],
           settings: data.settings ?? {},
           status: docStatus,
-          createdByUserId: ctx.userId,
+          createdByUserId: userId,
           items: {
             create: enrichedItems.map(({ productId, ...item }) => ({
               ...item,
@@ -246,11 +266,35 @@ export async function POST(req: NextRequest) {
           client: { select: { id: true, businessName: true } },
         },
       });
+
+      // Decrease inventory stock when a sales order is created (atomic with document)
+      const warehouseId = await resolveWarehouseId(
+        tx,
+        businessId,
+        doc.shipFromWarehouseId,
+      );
+      if (warehouseId) {
+        await applyOutgoingStock({
+          tx,
+          businessId,
+          warehouseId,
+          items: doc.items,
+          reason: `Sales Order ${doc.documentNumber}`,
+        });
+      }
+
+      return doc;
     });
 
     return NextResponse.json({ document }, { status: 201 });
   } catch (err) {
+    if (err instanceof InsufficientStockError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     console.error("[POST /api/sales-orders]", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

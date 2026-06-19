@@ -5,6 +5,11 @@ import { getRbacContext } from "@/lib/rbac";
 import { quotationCreateSchema } from "@/lib/validations/quotation";
 import { DOCUMENT_TYPE_PREFIX } from "@/lib/validations/document";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
+import {
+  applyOutgoingStock,
+  InsufficientStockError,
+  resolveWarehouseId,
+} from "@/lib/inventory-stock";
 
 type InvoiceSettings = {
   paymentStatus?: string;
@@ -231,9 +236,11 @@ export async function POST(req: NextRequest) {
           ? (data.settings as object)
           : {};
 
-      return tx.document.create({
+      const { businessId, userId } = ctx;
+
+      const doc = await tx.document.create({
         data: {
-          businessId: ctx.businessId,
+          businessId,
           type: "INVOICE",
           documentNumber,
           documentDate: data.quotationDate
@@ -286,7 +293,7 @@ export async function POST(req: NextRequest) {
             eInvoiceStatus: "Not Generated",
           },
           status: docStatus,
-          createdByUserId: ctx.userId,
+          createdByUserId: userId,
           items: {
             create: enrichedItems.map(({ productId, ...item }) => ({
               ...item,
@@ -299,10 +306,31 @@ export async function POST(req: NextRequest) {
           client: { select: { id: true, businessName: true } },
         },
       });
+
+      // Decrease inventory stock when a standalone invoice is created
+      const warehouseId = await resolveWarehouseId(
+        tx,
+        businessId,
+        doc.shipFromWarehouseId,
+      );
+      if (warehouseId) {
+        await applyOutgoingStock({
+          tx,
+          businessId,
+          warehouseId,
+          items: doc.items,
+          reason: `Invoice ${doc.documentNumber}`,
+        });
+      }
+
+      return doc;
     });
 
     return NextResponse.json({ document }, { status: 201 });
   } catch (err) {
+    if (err instanceof InsufficientStockError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     if (process.env.NODE_ENV === "development") {
       console.error("[POST /api/invoices]", err);
     }

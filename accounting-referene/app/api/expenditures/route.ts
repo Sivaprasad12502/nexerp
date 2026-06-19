@@ -6,6 +6,10 @@ import { getVendorEmailFromDocument } from "@/lib/document-adapter";
 import { quotationCreateSchema } from "@/lib/validations/quotation";
 import { DOCUMENT_TYPE_PREFIX } from "@/lib/validations/document";
 import { calcItem, calcTotals, numberToWords } from "@/lib/quotation-utils";
+import {
+  applyIncomingStock,
+  resolveWarehouseId,
+} from "@/lib/inventory-stock";
 
 export async function GET() {
   const ctx = await getRbacContext();
@@ -152,9 +156,11 @@ export async function POST(req: NextRequest) {
       const ns = (v?: string | null) =>
         v === undefined || v === null || v.trim() === "" ? null : v.trim();
 
-      return tx.document.create({
+      const { businessId, userId } = ctx;
+
+      const doc = await tx.document.create({
         data: {
-          businessId: ctx.businessId,
+          businessId,
           type: "INVOICE",
           // Mark as purchased so it appears in the expenditures list immediately
           purchasedAt: new Date(),
@@ -206,7 +212,7 @@ export async function POST(req: NextRequest) {
           customFields: data.customFields ?? [],
           settings: data.settings ?? {},
           status: docStatus,
-          createdByUserId: ctx.userId,
+          createdByUserId: userId,
           items: {
             create: enrichedItems.map(({ productId, ...item }) => ({
               ...item,
@@ -219,6 +225,24 @@ export async function POST(req: NextRequest) {
           client: { select: { id: true, businessName: true } },
         },
       });
+
+      // Increase inventory stock when a purchase is recorded (payment-agnostic)
+      const warehouseId = await resolveWarehouseId(
+        tx,
+        businessId,
+        doc.shipFromWarehouseId,
+      );
+      if (warehouseId) {
+        await applyIncomingStock({
+          tx,
+          businessId,
+          warehouseId,
+          items: doc.items,
+          reason: `Purchase ${doc.documentNumber}`,
+        });
+      }
+
+      return doc;
     });
 
     return NextResponse.json({ document }, { status: 201 });

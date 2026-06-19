@@ -16,6 +16,10 @@ import type { DocumentType } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcTotals, numberToWords } from "@/lib/quotation-utils";
 import {
+  applyIncomingStock,
+  resolveWarehouseId,
+} from "@/lib/inventory-stock";
+import {
   DOCUMENT_TYPE_PREFIX,
   type DocumentTypeValue,
 } from "@/lib/validations/document";
@@ -832,6 +836,22 @@ export async function convertPurchaseOrderToPurchase(args: ConvertPoToPurchaseAr
         client: { select: { id: true, businessName: true } },
       },
     });
+
+    // Increase inventory stock when a PO is converted to a purchase
+    const purchaseWarehouseId = await resolveWarehouseId(
+      tx,
+      businessId,
+      document.shipFromWarehouseId,
+    );
+    if (purchaseWarehouseId) {
+      await applyIncomingStock({
+        tx,
+        businessId,
+        warehouseId: purchaseWarehouseId,
+        items: document.items,
+        reason: `Purchase ${document.documentNumber}`,
+      });
+    }
 
     await tx.documentConversion.create({
       data: {
@@ -1658,6 +1678,10 @@ export async function convertSalesOrderToInvoice(
         client: { select: { id: true, businessName: true } },
       },
     });
+
+    // NOTE: Stock is NOT decremented here. The source Sales Order already
+    // decremented inventory when it was created (via applyOutgoingStock in
+    // the sales-orders POST route). Decrementing again would double-count.
 
     await tx.documentConversion.create({
       data: {
