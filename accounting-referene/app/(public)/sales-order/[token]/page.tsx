@@ -112,6 +112,7 @@ export default function PublicSalesOrderPage() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState<string | null>(null);
   const [modalStep, setModalStep] = useState<AcceptModalStep>("none");
   const [poNumber, setPoNumber] = useState("");
@@ -126,7 +127,10 @@ export default function PublicSalesOrderPage() {
         if (!r.ok) throw new Error(body.error ?? "Failed to load sales order");
         return body as ApiResponse;
       })
-      .then((d) => setData(d));
+      .then((d) => {
+        setData(d);
+        if (d.purchaseOrderId) setPurchaseOrderId(d.purchaseOrderId);
+      });
 
   useEffect(() => {
     refetch()
@@ -153,6 +157,7 @@ export default function PublicSalesOrderPage() {
         return body as ConvertResponse;
       }),
     onSuccess: (result) => {
+      setPurchaseOrderId(result.document.id);
       setPurchaseOrderNumber(result.document.documentNumber);
       setModalStep("none");
       toast.success(
@@ -160,7 +165,7 @@ export default function PublicSalesOrderPage() {
           ? `Purchase order ${result.document.documentNumber} created!`
           : "Purchase order already exists.",
       );
-      router.push("/purchases/purchase-order");
+      router.push(`/sales-and-invoices/documents/${result.document.id}`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -274,7 +279,16 @@ export default function PublicSalesOrderPage() {
             </button>
           </div>
 
-          {!effectiveAccepted && (
+          {effectiveAccepted && purchaseOrderId ? (
+            <button
+              type="button"
+              onClick={() => router.push(`/sales-and-invoices/documents/${purchaseOrderId}`)}
+              className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4]"
+            >
+              <ExternalLink className="size-4" />
+              View Purchase Order
+            </button>
+          ) : !effectiveAccepted ? (
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -295,7 +309,7 @@ export default function PublicSalesOrderPage() {
                 Accept Sales Order
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -334,13 +348,18 @@ export default function PublicSalesOrderPage() {
                   Purchase Order #{purchaseOrderNumber}
                 </p>
               )}
-              <a
-                href="/purchases/purchase-order"
+              <button
+                type="button"
+                onClick={() =>
+                  purchaseOrderId
+                    ? router.push(`/sales-and-invoices/documents/${purchaseOrderId}`)
+                    : router.push("/purchases/purchase-order")
+                }
                 className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-purple-700 hover:underline"
               >
-                View Purchase Orders
+                View Purchase Order
                 <ExternalLink className="size-3.5" />
-              </a>
+              </button>
             </div>
           </div>
         )}
@@ -360,30 +379,43 @@ export default function PublicSalesOrderPage() {
         )}
       </div>
 
-      {!effectiveAccepted && (
+      {(effectiveAccepted && purchaseOrderId) || !effectiveAccepted ? (
         <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-200 bg-white px-6 py-4 sm:px-8">
           <div className="mx-auto flex max-w-4xl items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={startAcceptFlow}
-              disabled={convertMutation.isPending}
-              className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
-            >
-              <ThumbsUp className="size-4" />
-              Accept & Add As Purchase Order
-            </button>
-            <button
-              type="button"
-              onClick={startAcceptFlow}
-              disabled={convertMutation.isPending}
-              className="flex h-10 items-center gap-2 rounded-md bg-[#e8145a] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#c91050] disabled:opacity-60"
-            >
-              <ThumbsUp className="size-4" />
-              Accept Sales Order
-            </button>
+            {effectiveAccepted && purchaseOrderId ? (
+              <button
+                type="button"
+                onClick={() => router.push(`/sales-and-invoices/documents/${purchaseOrderId}`)}
+                className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4]"
+              >
+                <ExternalLink className="size-4" />
+                View Purchase Order
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={startAcceptFlow}
+                  disabled={convertMutation.isPending}
+                  className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
+                >
+                  <ThumbsUp className="size-4" />
+                  Accept & Add As Purchase Order
+                </button>
+                <button
+                  type="button"
+                  onClick={startAcceptFlow}
+                  disabled={convertMutation.isPending}
+                  className="flex h-10 items-center gap-2 rounded-md bg-[#e8145a] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#c91050] disabled:opacity-60"
+                >
+                  <ThumbsUp className="size-4" />
+                  Accept Sales Order
+                </button>
+              </>
+            )}
           </div>
         </div>
-      )}
+      ) : null}
 
       <Modal
         open={modalStep === "confirm"}

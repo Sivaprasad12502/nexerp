@@ -266,7 +266,16 @@ export default function PublicPurchaseOrderPage() {
             </button>
           </div>
 
-          {!effectiveAccepted && (
+          {effectiveAccepted && salesOrderId ? (
+            <button
+              type="button"
+              onClick={() => router.push(`/sales-and-invoices/documents/${salesOrderId}`)}
+              className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4]"
+            >
+              <ExternalLink className="size-4" />
+              View Sales Order
+            </button>
+          ) : !effectiveAccepted ? (
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -287,7 +296,7 @@ export default function PublicPurchaseOrderPage() {
                 {acceptMutation.isPending ? "Creating…" : "Accept Purchase Order"}
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -328,13 +337,18 @@ export default function PublicPurchaseOrderPage() {
                   Sales Order #{salesOrderNumber}
                 </p>
               )}
-              <a
-                href="/sales-and-invoices/sales-order"
+              <button
+                type="button"
+                onClick={() =>
+                  salesOrderId
+                    ? router.push(`/sales-and-invoices/documents/${salesOrderId}`)
+                    : router.push("/sales-and-invoices/sales-order")
+                }
                 className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-purple-700 hover:underline"
               >
-                View Sales Orders
+                View Sales Order
                 <ExternalLink className="size-3.5" />
-              </a>
+              </button>
             </div>
           </div>
         )}
@@ -355,30 +369,43 @@ export default function PublicPurchaseOrderPage() {
       </div>
 
       {/* Bottom action bar */}
-      {!effectiveAccepted && (
+      {(effectiveAccepted && salesOrderId) || !effectiveAccepted ? (
         <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-200 bg-white px-6 py-4 sm:px-8">
           <div className="mx-auto flex max-w-4xl items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleAccept}
-              disabled={acceptMutation.isPending}
-              className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
-            >
-              <ThumbsUp className="size-4" />
-              {acceptMutation.isPending ? "Creating…" : "Accept & Add As Sales Order"}
-            </button>
-            <button
-              type="button"
-              onClick={handleAccept}
-              disabled={acceptMutation.isPending}
-              className="flex h-10 items-center gap-2 rounded-md bg-[#e8145a] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#c91050] disabled:opacity-60"
-            >
-              <ThumbsUp className="size-4" />
-              {acceptMutation.isPending ? "Creating…" : "Accept Purchase Order"}
-            </button>
+            {effectiveAccepted && salesOrderId ? (
+              <button
+                type="button"
+                onClick={() => router.push(`/sales-and-invoices/documents/${salesOrderId}`)}
+                className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4]"
+              >
+                <ExternalLink className="size-4" />
+                View Sales Order
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleAccept}
+                  disabled={acceptMutation.isPending}
+                  className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
+                >
+                  <ThumbsUp className="size-4" />
+                  {acceptMutation.isPending ? "Creating…" : "Accept & Add As Sales Order"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAccept}
+                  disabled={acceptMutation.isPending}
+                  className="flex h-10 items-center gap-2 rounded-md bg-[#e8145a] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#c91050] disabled:opacity-60"
+                >
+                  <ThumbsUp className="size-4" />
+                  {acceptMutation.isPending ? "Creating…" : "Accept Purchase Order"}
+                </button>
+              </>
+            )}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
