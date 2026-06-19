@@ -77,7 +77,7 @@ export async function POST(_req: NextRequest, { params }: RouteCtx) {
     );
   }
 
-  // ── Find the buyer's linked expenditure conversion ────────────────────────
+  // ── Find the buyer's linked expenditure conversion (may not exist yet) ───
   const conversion = await prisma.documentConversion.findFirst({
     where: {
       sourceType: "INVOICE",
@@ -88,34 +88,24 @@ export async function POST(_req: NextRequest, { params }: RouteCtx) {
     select: { id: true, sourceId: true },
   });
 
-  if (!conversion) {
-    return NextResponse.json(
-      { error: "No expenditure linked to this invoice for your business." },
-      { status: 404 },
-    );
-  }
-
-  const expenditureId = conversion.sourceId;
-
-  // ── Delete expenditure + conversion in a transaction ─────────────────────
+  // ── Delete expenditure + conversion (if they exist) + notify seller ───────
   await prisma.$transaction(async (tx) => {
-    // Delete the expenditure document (items cascade via onDelete Cascade)
-    await tx.document.delete({ where: { id: expenditureId } });
-
-    // Delete the conversion audit row
-    await tx.documentConversion.delete({ where: { id: conversion.id } });
-
-    // In-app notification to the seller (invoice owner)
-    const buyerBusinessName = (await tx.business.findUnique({
+    if (conversion) {
+      // Reject after having accepted: remove the expenditure document and link
+      await tx.document.delete({ where: { id: conversion.sourceId } });
+      await tx.documentConversion.delete({ where: { id: conversion.id } });
+    }
+    // In both cases (declined before or after accepting) notify the seller
+    const buyerBiz = await tx.business.findUnique({
       where: { id: buyerCtx.businessId },
       select: { brandName: true, name: true },
-    }));
-    const buyerName = buyerBusinessName?.brandName ?? buyerBusinessName?.name ?? "Your client";
+    });
+    const buyerName = buyerBiz?.brandName ?? buyerBiz?.name ?? "Your client";
 
     await notifyBusinessOwner(tx, invoice.businessId, {
       type: NotificationType.QUOTATION_REJECTED,
-      title: "Invoice removed from expenditures",
-      message: `${buyerName} removed invoice ${invoice.documentNumber} from their expenditures.`,
+      title: "Expenditure rejected",
+      message: `${buyerName} rejected invoice ${invoice.documentNumber} as an expenditure.`,
       entityType: "DOCUMENT",
       entityId: invoice.id,
     });

@@ -167,7 +167,8 @@ export default function PublicInvoicePage() {
   const [localExpenditureId, setLocalExpenditureId] = useState<string | null>(
     null,
   );
-  const [localExpenditureRemoved, setLocalExpenditureRemoved] = useState(false);
+  // true when user rejected (before or after accepting) — hides the accept/reject pair
+  const [localExpenditureDeclined, setLocalExpenditureDeclined] = useState(false);
 
   const { data: nextNumberData } = useNextDocumentNumber("INVOICE");
 
@@ -286,7 +287,7 @@ export default function PublicInvoicePage() {
       }),
     onSuccess: (result) => {
       setLocalExpenditureId(result.document.id);
-      setLocalExpenditureRemoved(false);
+      setLocalExpenditureDeclined(false);
       setExpenditureModalStep("none");
       toast.success(
         result.created
@@ -310,9 +311,9 @@ export default function PublicInvoicePage() {
       }),
     onSuccess: () => {
       setLocalExpenditureId(null);
-      setLocalExpenditureRemoved(true);
+      setLocalExpenditureDeclined(true);
       setExpenditureModalStep("none");
-      toast.success("Expenditure removed. The sender has been notified.");
+      toast.success("Expenditure rejected. The sender has been notified.");
       refetch().catch(() => null);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -421,11 +422,14 @@ export default function PublicInvoicePage() {
   const showAcceptReject = isExpense && !effectiveAccepted && !isRejected;
 
   // Expenditure state (normal invoices only)
+  // expenditureAdded: a conversion exists and hasn't been rejected this session
   const expenditureAdded =
-    !localExpenditureRemoved &&
+    !localExpenditureDeclined &&
     (serverExpenditureAdded || Boolean(localExpenditureId));
-  const expenditureDocumentId =
-    localExpenditureId ?? serverExpenditureDocumentId;
+  const expenditureDocumentId = localExpenditureId ?? serverExpenditureDocumentId;
+  // showExpenditureButtons: show Accept+Reject pair — always for normal invoices
+  // until the user has accepted (expenditureAdded) or declined this session
+  const showExpenditureButtons = !isExpense && !expenditureAdded && !localExpenditureDeclined;
 
   // Normal invoice payment state
   const invoiceSettings = document.settings ?? {};
@@ -473,7 +477,7 @@ export default function PublicInvoicePage() {
             </button>
           </div>
 
-          {/* Right: Accept / Reject (expense) OR Expenditure + Record Payment (normal invoice) */}
+          {/* Right: Accept / Reject (expense docs) OR Expenditure actions + Record Payment (normal invoices) */}
           {showAcceptReject ? (
             <div className="flex items-center gap-3">
               <button
@@ -498,40 +502,38 @@ export default function PublicInvoicePage() {
           ) : (
             !isExpense && (
               <div className="flex flex-wrap items-center gap-2">
-                {/* Expenditure button */}
+                {/* Expenditure: show Accept+Reject pair initially; swap to View after accepting */}
                 {expenditureAdded ? (
+                  <a
+                    href={`/purchases/expenditure/${expenditureDocumentId}`}
+                    className="flex h-9 items-center gap-2 rounded-md border border-[#7438dc] px-4 text-sm font-semibold text-[#7438dc] transition-colors hover:bg-purple-50"
+                  >
+                    <Receipt className="size-4" />
+                    View via Expenditure
+                  </a>
+                ) : showExpenditureButtons ? (
                   <>
-                    <a
-                      href={`/purchases/expenditure/${expenditureDocumentId}`}
-                      className="flex h-9 items-center gap-2 rounded-md border border-[#7438dc] px-4 text-sm font-semibold text-[#7438dc] transition-colors hover:bg-purple-50"
+                    <button
+                      type="button"
+                      onClick={startAddExpenditureFlow}
+                      disabled={addExpenditureMutation.isPending}
+                      className="flex h-9 items-center gap-2 rounded-md bg-[#7438dc] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
                     >
-                      <Receipt className="size-4" />
-                      View via Expenditure
-                    </a>
+                      <PlusCircle className="size-4" />
+                      {addExpenditureMutation.isPending ? "Adding…" : "Accept Expenditure"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setExpenditureModalStep("reject")}
                       disabled={rejectExpenditureMutation.isPending}
-                      className="flex h-9 items-center gap-2 rounded-md border border-red-300 px-4 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
+                      className="flex h-9 items-center gap-2 rounded-md bg-[#e8145a] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#c91050] disabled:opacity-60"
                     >
-                      <XCircle className="size-4" />
-                      Reject Expenditure
+                      <ThumbsDown className="size-4" />
+                      {rejectExpenditureMutation.isPending ? "Rejecting…" : "Reject Expenditure"}
                     </button>
                   </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={startAddExpenditureFlow}
-                    disabled={addExpenditureMutation.isPending}
-                    className="flex h-9 items-center gap-2 rounded-md bg-[#7438dc] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
-                  >
-                    <PlusCircle className="size-4" />
-                    {addExpenditureMutation.isPending
-                      ? "Adding…"
-                      : "Add to Expenditure"}
-                  </button>
-                )}
-                {/* Record Payment */}
+                ) : null}
+                {/* Record Payment (always shown when unpaid) */}
                 {!isPaid && (
                   <button
                     type="button"
@@ -716,35 +718,35 @@ export default function PublicInvoicePage() {
             <div className="mx-auto flex max-w-4xl items-center justify-end gap-3">
               {/* Expenditure actions */}
               {expenditureAdded ? (
+                <a
+                  href={`/purchases/expenditure/${expenditureDocumentId}`}
+                  className="flex h-10 items-center gap-2 rounded-md border border-[#7438dc] px-5 text-sm font-semibold text-[#7438dc] transition-colors hover:bg-purple-50"
+                >
+                  <Receipt className="size-4" />
+                  View via Expenditure
+                </a>
+              ) : showExpenditureButtons ? (
                 <>
-                  <a
-                    href={`/purchases/expenditure/${expenditureDocumentId}`}
-                    className="flex h-10 items-center gap-2 rounded-md border border-[#7438dc] px-5 text-sm font-semibold text-[#7438dc] transition-colors hover:bg-purple-50"
+                  <button
+                    type="button"
+                    onClick={startAddExpenditureFlow}
+                    disabled={addExpenditureMutation.isPending}
+                    className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
                   >
-                    <Receipt className="size-4" />
-                    View via Expenditure
-                  </a>
+                    <PlusCircle className="size-4" />
+                    {addExpenditureMutation.isPending ? "Adding…" : "Accept Expenditure"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setExpenditureModalStep("reject")}
                     disabled={rejectExpenditureMutation.isPending}
-                    className="flex h-10 items-center gap-2 rounded-md border border-red-300 px-5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
+                    className="flex h-10 items-center gap-2 rounded-md bg-[#e8145a] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#c91050] disabled:opacity-60"
                   >
-                    <XCircle className="size-4" />
-                    Reject Expenditure
+                    <ThumbsDown className="size-4" />
+                    {rejectExpenditureMutation.isPending ? "Rejecting…" : "Reject Expenditure"}
                   </button>
                 </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={startAddExpenditureFlow}
-                  disabled={addExpenditureMutation.isPending}
-                  className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
-                >
-                  <PlusCircle className="size-4" />
-                  {addExpenditureMutation.isPending ? "Adding…" : "Add to Expenditure"}
-                </button>
-              )}
+              ) : null}
               {/* Record Payment alongside */}
               {!isPaid && (
                 <button
@@ -919,7 +921,7 @@ export default function PublicInvoicePage() {
         open={expenditureModalStep === "reject"}
         onClose={() => setExpenditureModalStep("none")}
         title="Reject Expenditure"
-        description="This will remove the invoice from your expenditures and notify the sender."
+        description="Reject this invoice from your expenditures and notify the sender."
         footer={
           <>
             <Button
@@ -936,15 +938,16 @@ export default function PublicInvoicePage() {
               onClick={() => rejectExpenditureMutation.mutate()}
             >
               {rejectExpenditureMutation.isPending
-                ? "Removing…"
+                ? "Rejecting…"
                 : "Reject Expenditure"}
             </Button>
           </>
         }
       >
         <p className="text-sm text-zinc-600">
-          This will permanently remove the linked expenditure from your books
-          and notify the invoice sender by email. This action cannot be undone.
+          {expenditureAdded
+            ? "This will remove the linked expenditure from your books and notify the invoice sender by email."
+            : "This will notify the invoice sender that you have declined to record this as an expenditure."}
         </p>
       </Modal>
 
