@@ -62,6 +62,11 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
   let invoiceDocumentId: string | null = null;
   const acceptanceStatus = (settings.acceptanceStatus as string) ?? null;
 
+  // For normal invoices (purchasedAt not set), expose whether a buyer has
+  // already added it as an expenditure so the public page can swap the button.
+  let expenditureAdded = false;
+  let expenditureDocumentId: string | null = null;
+
   if (document.purchasedAt) {
     const conversion = await prisma.documentConversion.findUnique({
       where: {
@@ -75,6 +80,20 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     });
     invoiceDocumentId = conversion?.targetId ?? null;
     isAccepted = Boolean(conversion) || acceptanceStatus === "ACCEPTED";
+  } else {
+    // Normal invoice — find if any buyer has linked it as an expenditure.
+    // We return the first match; the buyer-specific check happens in the
+    // add/reject routes after auth, so this is just a hint for the UI.
+    const buyerConversion = await prisma.documentConversion.findFirst({
+      where: {
+        sourceType: "INVOICE",
+        targetType: "INVOICE",
+        targetId: document.id,
+      },
+      select: { sourceId: true },
+    });
+    expenditureDocumentId = buyerConversion?.sourceId ?? null;
+    expenditureAdded = Boolean(buyerConversion);
   }
 
   return NextResponse.json({
@@ -83,6 +102,8 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     isAccepted,
     acceptanceStatus,
     invoiceDocumentId,
+    expenditureAdded,
+    expenditureDocumentId,
     recipientEmail: (settings.clientEmail as string) ?? null,
   });
 }

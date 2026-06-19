@@ -1088,6 +1088,225 @@ export async function convertExpenseToVendorInvoice(
   });
 }
 
+// ─── Normal Invoice → Buyer Expenditure (client-side, perspective swap) ───────
+
+export type ConvertInvoiceToBuyerExpenditureArgs = {
+  invoiceDocumentId: string;
+  buyerBusinessId: string;
+  buyerUserId: string;
+};
+
+/**
+ * Client-side: takes a normal invoice sent by a seller and creates an
+ * expenditure document in the buyer's own business. This is the mirror of
+ * `convertExpenseToVendorInvoice` — the buyer records the invoice as a
+ * purchase/expense. Idempotent via DocumentConversion audit row.
+ *
+ * The DocumentConversion written here (sourceId=expenditure, targetId=invoice)
+ * is exactly the shape that `syncBuyerExpenditureOnVendorInvoicePaid` reads, so
+ * paid-status sync from the seller's invoice to the buyer's expenditure works
+ * automatically with no further changes.
+ */
+export async function convertInvoiceToBuyerExpenditure(
+  args: ConvertInvoiceToBuyerExpenditureArgs,
+) {
+  const { invoiceDocumentId, buyerBusinessId, buyerUserId } = args;
+
+  return prisma.$transaction(async (tx) => {
+    // ── 1. Load the source invoice ──────────────────────────────────────────
+    const invoice = await tx.document.findUnique({
+      where: { id: invoiceDocumentId, type: "INVOICE" as DocumentType },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        business: {
+          select: { name: true, brandName: true, country: true, gstNumber: true },
+        },
+      },
+    });
+
+    if (!invoice || invoice.purchasedAt) {
+      // purchasedAt means it is already an expenditure, not a real invoice
+      throw new ConversionError(
+        "NOT_FOUND",
+        "Invoice not found or is not a regular invoice.",
+      );
+    }
+
+    // ── 2. Prevent self-expensing ───────────────────────────────────────────
+    if (buyerBusinessId === invoice.businessId) {
+      throw new ConversionError(
+        "NOT_APPROVED",
+        "Cannot create an expenditure from your own invoice.",
+      );
+    }
+
+    // ── 3. Idempotency: check if buyer already added this invoice ───────────
+    const existingConversion = await tx.documentConversion.findFirst({
+      where: {
+        sourceType: "INVOICE",
+        targetType: "INVOICE",
+        targetId: invoiceDocumentId,
+        businessId: buyerBusinessId,
+      },
+      include: {
+        // load the source (expenditure) document to return it
+      },
+    });
+
+    if (existingConversion) {
+      const existingExpenditure = await tx.document.findUnique({
+        where: { id: existingConversion.sourceId },
+        include: { items: { orderBy: { sortOrder: "asc" } } },
+      });
+      if (existingExpenditure) {
+        return { document: existingExpenditure, created: false };
+      }
+    }
+
+    // ── 4. Load buyer business ──────────────────────────────────────────────
+    const buyerBusiness = await tx.business.findUnique({
+      where: { id: buyerBusinessId },
+      select: { name: true, brandName: true, country: true, gstNumber: true },
+    });
+
+    if (!buyerBusiness) {
+      throw new ConversionError("NO_BUSINESS", "Buyer business not found.");
+    }
+
+    // ── 5. Generate expenditure document number ─────────────────────────────
+    const prefix = DOCUMENT_TYPE_PREFIX["INVOICE"];
+    const count = await tx.document.count({
+      where: { businessId: buyerBusinessId, type: "INVOICE" as DocumentType },
+    });
+    const documentNumber = `${prefix}-${String(count + 1).padStart(4, "0")}`;
+
+    // ── 6. Recompute totals ─────────────────────────────────────────────────
+    const additionalChargesTotal = (
+      Array.isArray(invoice.additionalCharges)
+        ? (invoice.additionalCharges as { amount?: number }[])
+        : []
+    ).reduce((s, c) => s + (c.amount ?? 0), 0);
+
+    const totals = calcTotals({
+      items: invoice.items,
+      discountAmount: invoice.discountAmount,
+      additionalCharges: additionalChargesTotal,
+    });
+
+    const now = new Date();
+
+    // ── 7. Perspective swap ─────────────────────────────────────────────────
+    // In the invoice: fromName = seller, clientName = buyer.
+    // In the expenditure: fromName = buyer (us), clientName = seller (vendor).
+    const buyerFromName = buyerBusiness.brandName ?? buyerBusiness.name;
+    const buyerFromAddress = buyerBusiness.country ?? null;
+    const buyerFromGstin = buyerBusiness.gstNumber ?? null;
+
+    // ── 8. Carry over paid status if the invoice is already paid ───────────
+    const invoiceSettings =
+      typeof invoice.settings === "object" && invoice.settings !== null
+        ? (invoice.settings as Record<string, unknown>)
+        : {};
+    const inheritedPaymentStatus =
+      invoiceSettings.paymentStatus === "PAID" ? "PAID" : "UNPAID";
+    const inheritedPaymentDate =
+      inheritedPaymentStatus === "PAID" ? invoiceSettings.paymentDate : undefined;
+
+    // ── 9. Create expenditure document ─────────────────────────────────────
+    const expenditure = await tx.document.create({
+      data: {
+        businessId: buyerBusinessId,
+        type: "INVOICE" as DocumentType,
+        documentNumber,
+        documentDate: invoice.documentDate ?? now,
+        validTillDate: invoice.validTillDate,
+        title: invoice.title ?? "Expenditure",
+        subtitle: invoice.subtitle,
+        logo: invoice.logo,
+        currency: invoice.currency,
+
+        // Buyer is the "from" party in their own expenditure
+        fromName: buyerFromName,
+        fromAddress: buyerFromAddress,
+        fromGstin: buyerFromGstin,
+        fromPan: null,
+
+        // Seller (original invoice owner) is the vendor/client in the expenditure
+        clientId: null,
+        clientName: invoice.fromName,
+        clientAddress: invoice.fromAddress,
+        clientGstin: invoice.fromGstin,
+
+        discountLabel: invoice.discountLabel,
+        discountAmount: invoice.discountAmount,
+        additionalCharges: invoice.additionalCharges as object,
+
+        subTotal: totals.subTotal,
+        totalTax: totals.totalTax,
+        totalDiscount: totals.totalDiscount,
+        totalQuantity: totals.totalQuantity,
+        totalAmount: totals.totalAmount,
+        amountInWords: numberToWords(totals.totalAmount, invoice.currency),
+
+        termsAndConditions: invoice.termsAndConditions,
+        notes: invoice.notes,
+        signature: invoice.signature,
+        additionalInfo: invoice.additionalInfo,
+        contactDetails: invoice.contactDetails,
+        attachments: invoice.attachments,
+        customFields: invoice.customFields as object,
+        settings: {
+          paymentStatus: inheritedPaymentStatus,
+          ...(inheritedPaymentDate !== undefined
+            ? { paymentDate: inheritedPaymentDate }
+            : {}),
+          reverseCharge: "No",
+          eInvoiceStatus: "Not Generated",
+        },
+
+        status: "ISSUED",
+        purchasedAt: now, // marks this as an expenditure
+        createdByUserId: buyerUserId,
+
+        items: {
+          create: invoice.items.map(({ id: _id, documentId: _did, ...item }) => ({
+            ...item,
+            productId: item.productId ?? null,
+          })),
+        },
+      },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+      },
+    });
+
+    // ── 10. Write conversion audit row ──────────────────────────────────────
+    // Shape: sourceId = expenditure, targetId = invoice.
+    // This is exactly what syncBuyerExpenditureOnVendorInvoicePaid reads.
+    await tx.documentConversion.create({
+      data: {
+        businessId: buyerBusinessId,
+        sourceType: "INVOICE",
+        sourceId: expenditure.id,
+        targetType: "INVOICE",
+        targetId: invoiceDocumentId,
+        createdByUserId: buyerUserId,
+      },
+    });
+
+    // ── 11. Notify the seller ───────────────────────────────────────────────
+    await notifyBusinessOwner(tx, invoice.businessId, {
+      type: NotificationType.INVOICE_RECEIVED,
+      title: "Invoice added as expenditure",
+      message: `${buyerFromName} added invoice ${invoice.documentNumber} to their expenditures.`,
+      entityType: "DOCUMENT",
+      entityId: invoiceDocumentId,
+    });
+
+    return { document: expenditure, created: true };
+  });
+}
+
 // ─── PO → Sales Order (vendor-side, perspective swap) ─────────────────────────
 
 const SO_TARGET: DocumentTypeValue = "SALES_ORDER";

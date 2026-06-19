@@ -17,6 +17,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   ExternalLink,
+  PlusCircle,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -109,6 +111,8 @@ type ApiResponse = {
   isAccepted: boolean;
   acceptanceStatus: string | null;
   invoiceDocumentId: string | null;
+  expenditureAdded: boolean;
+  expenditureDocumentId: string | null;
   recipientEmail: string | null;
 };
 
@@ -121,6 +125,7 @@ type PaymentFormData = {
 };
 
 type AcceptModalStep = "none" | "confirm" | "invoiceNumber" | "reject";
+type ExpenditureModalStep = "none" | "add" | "reject";
 
 type AcceptResponse = {
   document: { id: string; documentNumber: string };
@@ -149,12 +154,20 @@ export default function PublicInvoicePage() {
     refId: "",
   });
 
-  // Accept / reject modal state
+  // Accept / reject modal state (for expense docs)
   const [modalStep, setModalStep] = useState<AcceptModalStep>("none");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [updateBillingAddress, setUpdateBillingAddress] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
+
+  // Add-to-expenditure / reject-expenditure modal state (for normal invoices)
+  const [expenditureModalStep, setExpenditureModalStep] =
+    useState<ExpenditureModalStep>("none");
+  const [localExpenditureId, setLocalExpenditureId] = useState<string | null>(
+    null,
+  );
+  const [localExpenditureRemoved, setLocalExpenditureRemoved] = useState(false);
 
   const { data: nextNumberData } = useNextDocumentNumber("INVOICE");
 
@@ -260,6 +273,51 @@ export default function PublicInvoicePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // ── Add to Expenditure mutation (normal invoices only) ─────────────────────
+  const addExpenditureMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/public/invoices/${token}/add-expenditure`, {
+        method: "POST",
+      }).then(async (r) => {
+        const body = await r.json();
+        if (!r.ok)
+          throw new Error(body.error ?? "Failed to add as expenditure");
+        return body as { document: { id: string }; created: boolean };
+      }),
+    onSuccess: (result) => {
+      setLocalExpenditureId(result.document.id);
+      setLocalExpenditureRemoved(false);
+      setExpenditureModalStep("none");
+      toast.success(
+        result.created
+          ? "Invoice added to your expenditures."
+          : "Already added to your expenditures.",
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // ── Reject (remove) Expenditure mutation ──────────────────────────────────
+  const rejectExpenditureMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/public/invoices/${token}/reject-expenditure`, {
+        method: "POST",
+      }).then(async (r) => {
+        const body = await r.json();
+        if (!r.ok)
+          throw new Error(body.error ?? "Failed to remove expenditure");
+        return body;
+      }),
+    onSuccess: () => {
+      setLocalExpenditureId(null);
+      setLocalExpenditureRemoved(true);
+      setExpenditureModalStep("none");
+      toast.success("Expenditure removed. The sender has been notified.");
+      refetch().catch(() => null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const startAcceptFlow = () => {
     if (sessionStatus !== "authenticated") {
@@ -270,6 +328,17 @@ export default function PublicInvoicePage() {
       return;
     }
     setModalStep("confirm");
+  };
+
+  const startAddExpenditureFlow = () => {
+    if (sessionStatus !== "authenticated") {
+      redirectToAuth(router, {
+        callbackPath: `/invoice/${token}`,
+        email: data?.recipientEmail,
+      });
+      return;
+    }
+    setExpenditureModalStep("add");
   };
 
   const handleConfirmContinue = () => {
@@ -335,13 +404,28 @@ export default function PublicInvoicePage() {
     );
   }
 
-  const { document, payments, isAccepted, acceptanceStatus, invoiceDocumentId } = data;
+  const {
+    document,
+    payments,
+    isAccepted,
+    acceptanceStatus,
+    invoiceDocumentId,
+    expenditureAdded: serverExpenditureAdded,
+    expenditureDocumentId: serverExpenditureDocumentId,
+  } = data;
 
   // Determine whether this is an expense/purchase doc (has purchasedAt)
   const isExpense = Boolean(document.purchasedAt);
   const isRejected = acceptanceStatus === "REJECTED";
   const effectiveAccepted = isAccepted || Boolean(createdInvoiceId);
   const showAcceptReject = isExpense && !effectiveAccepted && !isRejected;
+
+  // Expenditure state (normal invoices only)
+  const expenditureAdded =
+    !localExpenditureRemoved &&
+    (serverExpenditureAdded || Boolean(localExpenditureId));
+  const expenditureDocumentId =
+    localExpenditureId ?? serverExpenditureDocumentId;
 
   // Normal invoice payment state
   const invoiceSettings = document.settings ?? {};
@@ -389,7 +473,7 @@ export default function PublicInvoicePage() {
             </button>
           </div>
 
-          {/* Right: Accept / Reject (expense) OR Record Payment (normal invoice) */}
+          {/* Right: Accept / Reject (expense) OR Expenditure + Record Payment (normal invoice) */}
           {showAcceptReject ? (
             <div className="flex items-center gap-3">
               <button
@@ -412,15 +496,53 @@ export default function PublicInvoicePage() {
               </button>
             </div>
           ) : (
-            !isExpense && !isPaid && (
-              <button
-                type="button"
-                onClick={() => setShowPaymentForm(true)}
-                className="flex h-9 items-center gap-2 rounded-md bg-[#7438dc] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4]"
-              >
-                <CreditCard className="size-4" />
-                Record Payment
-              </button>
+            !isExpense && (
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Expenditure button */}
+                {expenditureAdded ? (
+                  <>
+                    <a
+                      href={`/purchases/expenditure/${expenditureDocumentId}`}
+                      className="flex h-9 items-center gap-2 rounded-md border border-[#7438dc] px-4 text-sm font-semibold text-[#7438dc] transition-colors hover:bg-purple-50"
+                    >
+                      <Receipt className="size-4" />
+                      View via Expenditure
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setExpenditureModalStep("reject")}
+                      disabled={rejectExpenditureMutation.isPending}
+                      className="flex h-9 items-center gap-2 rounded-md border border-red-300 px-4 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
+                    >
+                      <XCircle className="size-4" />
+                      Reject Expenditure
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startAddExpenditureFlow}
+                    disabled={addExpenditureMutation.isPending}
+                    className="flex h-9 items-center gap-2 rounded-md bg-[#7438dc] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
+                  >
+                    <PlusCircle className="size-4" />
+                    {addExpenditureMutation.isPending
+                      ? "Adding…"
+                      : "Add to Expenditure"}
+                  </button>
+                )}
+                {/* Record Payment */}
+                {!isPaid && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentForm(true)}
+                    className="flex h-9 items-center gap-2 rounded-md border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+                  >
+                    <CreditCard className="size-4" />
+                    Record Payment
+                  </button>
+                )}
+              </div>
             )
           )}
         </div>
@@ -459,6 +581,12 @@ export default function PublicInvoicePage() {
             {!isExpense && !isPaid && (
               <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
                 Unpaid
+              </span>
+            )}
+            {!isExpense && expenditureAdded && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
+                <Receipt className="size-3.5" />
+                Added to Expenditure
               </span>
             )}
           </div>
@@ -583,17 +711,51 @@ export default function PublicInvoicePage() {
           </div>
         </div>
       ) : (
-        !isExpense && !isPaid && (
+        !isExpense && (
           <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-200 bg-white px-6 py-4 sm:px-8">
             <div className="mx-auto flex max-w-4xl items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowPaymentForm(true)}
-                className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4]"
-              >
-                <CreditCard className="size-4" />
-                Record Payment
-              </button>
+              {/* Expenditure actions */}
+              {expenditureAdded ? (
+                <>
+                  <a
+                    href={`/purchases/expenditure/${expenditureDocumentId}`}
+                    className="flex h-10 items-center gap-2 rounded-md border border-[#7438dc] px-5 text-sm font-semibold text-[#7438dc] transition-colors hover:bg-purple-50"
+                  >
+                    <Receipt className="size-4" />
+                    View via Expenditure
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setExpenditureModalStep("reject")}
+                    disabled={rejectExpenditureMutation.isPending}
+                    className="flex h-10 items-center gap-2 rounded-md border border-red-300 px-5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
+                  >
+                    <XCircle className="size-4" />
+                    Reject Expenditure
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startAddExpenditureFlow}
+                  disabled={addExpenditureMutation.isPending}
+                  className="flex h-10 items-center gap-2 rounded-md bg-[#7438dc] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6230c4] disabled:opacity-60"
+                >
+                  <PlusCircle className="size-4" />
+                  {addExpenditureMutation.isPending ? "Adding…" : "Add to Expenditure"}
+                </button>
+              )}
+              {/* Record Payment alongside */}
+              {!isPaid && (
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentForm(true)}
+                  className="flex h-10 items-center gap-2 rounded-md border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+                >
+                  <CreditCard className="size-4" />
+                  Record Payment
+                </button>
+              )}
             </div>
           </div>
         )
@@ -717,6 +879,73 @@ export default function PublicInvoicePage() {
             className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 outline-none focus:border-[#7438dc] focus:ring-1 focus:ring-[#7438dc] resize-none"
           />
         </div>
+      </Modal>
+
+      {/* ── Modal: Accept / Add to Expenditure ── */}
+      <Modal
+        open={expenditureModalStep === "add"}
+        onClose={() => setExpenditureModalStep("none")}
+        title="Accept Expenditure"
+        description="This will add this invoice to your expenditures as a purchase record."
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExpenditureModalStep("none")}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#7438dc] text-white hover:bg-[#6330c2]"
+              disabled={addExpenditureMutation.isPending}
+              onClick={() => addExpenditureMutation.mutate()}
+            >
+              {addExpenditureMutation.isPending ? "Adding…" : "Accept Expenditure"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-zinc-600">
+          Are you sure you want to add this invoice to your expenditures? It
+          will appear in your Purchases &amp; Expenses and its paid status will
+          stay in sync with this invoice.
+        </p>
+      </Modal>
+
+      {/* ── Modal: Reject / Remove Expenditure ── */}
+      <Modal
+        open={expenditureModalStep === "reject"}
+        onClose={() => setExpenditureModalStep("none")}
+        title="Reject Expenditure"
+        description="This will remove the invoice from your expenditures and notify the sender."
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExpenditureModalStep("none")}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#e8145a] text-white hover:bg-[#c91050]"
+              disabled={rejectExpenditureMutation.isPending}
+              onClick={() => rejectExpenditureMutation.mutate()}
+            >
+              {rejectExpenditureMutation.isPending
+                ? "Removing…"
+                : "Reject Expenditure"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-zinc-600">
+          This will permanently remove the linked expenditure from your books
+          and notify the invoice sender by email. This action cannot be undone.
+        </p>
       </Modal>
 
       {/* ── Payment form modal (normal invoices only) ── */}
