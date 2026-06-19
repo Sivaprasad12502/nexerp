@@ -39,6 +39,11 @@ export async function GET() {
       getVendorEmailFromDocument(doc) ??
       (vendorName ? vendorByName.get(vendorName.toLowerCase()) ?? null : null);
 
+    const settings =
+      typeof doc.settings === "object" && doc.settings !== null
+        ? (doc.settings as Record<string, unknown>)
+        : {};
+
     return {
       id: doc.id,
       documentNumber: doc.documentNumber,
@@ -50,6 +55,8 @@ export async function GET() {
       status: doc.status,
       sentAt: doc.sentAt,
       purchasedAt: doc.purchasedAt,
+      paymentStatus: (settings.paymentStatus as string | undefined) ?? "UNPAID",
+      paymentDate: (settings.paymentDate as string | null | undefined) ?? null,
       clientName: doc.clientName,
       fromName: doc.fromName,
       vendorName,

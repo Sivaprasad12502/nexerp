@@ -184,6 +184,8 @@ model Client {
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
+  linkedBusinessId String?   // PO issuer's business id; null for manually-added clients
+
   // Basic info
   logo         String?
   businessName String
@@ -233,6 +235,8 @@ model Client {
   quotations     Quotation[]
   documents      Document[]
 
+  // NULL values are distinct in PG, so manual clients (linkedBusinessId = NULL) don't collide with each other
+  @@unique([businessId, linkedBusinessId])
   @@index([businessId, status])
 }
 
@@ -722,6 +726,7 @@ enum NotificationType {
   QUOTATION_APPROVED
   QUOTATION_REJECTED
   VENDOR_LINKED
+  CLIENT_LINKED
   PURCHASE_ORDER_RECEIVED // reserved — Phase 4/5
   INVOICE_RECEIVED        // reserved — Phase 4/5
   PAYMENT_RECEIVED        // reserved — Phase 4/5

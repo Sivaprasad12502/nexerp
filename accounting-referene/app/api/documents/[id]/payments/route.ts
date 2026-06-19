@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
+import { syncBuyerExpenditureOnVendorInvoicePaid } from "@/lib/sync-vendor-payment";
 import { paymentCreateSchema } from "@/lib/validations/payment";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -100,6 +101,8 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
         },
       },
     });
+
+    await syncBuyerExpenditureOnVendorInvoicePaid(tx, id, data.paymentDate);
 
     return p;
   });

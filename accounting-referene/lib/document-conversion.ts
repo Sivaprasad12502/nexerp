@@ -19,11 +19,17 @@ import {
   DOCUMENT_TYPE_PREFIX,
   type DocumentTypeValue,
 } from "@/lib/validations/document";
-import { notifyBusinessOwner, NotificationType } from "@/lib/notifications";
+import {
+  notifyBusinessOwner,
+  notifyClientLinked,
+  NotificationType,
+} from "@/lib/notifications";
 import { getClientDisplayName, getQuotationLabel } from "@/lib/quotation-display";
 import {
   ensureVendorRelationship,
   loadSellerSnapshot,
+  ensureClientRelationship,
+  loadBuyerSnapshot,
 } from "@/lib/vendor-relationship";
 
 // ─── Typed error ──────────────────────────────────────────────────────────────
@@ -1155,6 +1161,22 @@ export async function convertPurchaseOrderToSalesOrder(
       throw new ConversionError("NO_BUSINESS", "Vendor business not found.");
     }
 
+    // Auto-provision the PO issuer (buyer) as a Client in the vendor's account
+    const buyerSnapshot = await loadBuyerSnapshot(tx, po.businessId);
+    let autoClientId: string | null = null;
+    let buyerDisplayName: string = po.fromName ?? "The buyer";
+
+    if (buyerSnapshot) {
+      const clientResult = await ensureClientRelationship(tx, {
+        buyerBusinessId: po.businessId,
+        sellerBusinessId: vendorBusinessId,
+        buyerSnapshot,
+        po: { fromAddress: po.fromAddress },
+      });
+      autoClientId = clientResult.clientId;
+      buyerDisplayName = buyerSnapshot.brandName ?? buyerSnapshot.name;
+    }
+
     const prefix = DOCUMENT_TYPE_PREFIX[SO_TARGET];
     const count = await tx.document.count({
       where: { businessId: vendorBusinessId, type: SO_TARGET as DocumentType },
@@ -1193,8 +1215,9 @@ export async function convertPurchaseOrderToSalesOrder(
         fromGstin: po.clientGstin,
         fromPan: null,
 
-        // Buyer (PO issuer) is "client" on the vendor's Sales Order
-        clientId: null,
+        // Buyer (PO issuer) is "client" on the vendor's Sales Order.
+        // clientId is set when auto-provisioning succeeds; snapshot fields kept as fallback.
+        clientId: autoClientId,
         clientName: po.fromName,
         clientAddress: po.fromAddress,
         clientGstin: po.fromGstin,
@@ -1265,6 +1288,13 @@ export async function convertPurchaseOrderToSalesOrder(
       message: `${vendorBusiness.brandName ?? vendorBusiness.name} accepted your purchase order and created a sales order.`,
       entityType: "DOCUMENT",
       entityId: purchaseOrderId,
+    });
+
+    // Notify the vendor that the buyer was auto-linked as a client
+    await notifyClientLinked(tx, {
+      vendorBusinessId,
+      buyerName: buyerDisplayName,
+      documentId: document.id,
     });
 
     return { document, created: true };

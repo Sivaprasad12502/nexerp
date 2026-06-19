@@ -24,6 +24,8 @@ export type ExpenditureRow = {
   status: string;
   sentAt: string | null;
   purchasedAt: string | null;
+  paymentStatus: string;
+  paymentDate: string | null;
   clientName: string | null;
   fromName: string | null;
   vendorName: string;

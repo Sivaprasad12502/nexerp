@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ChevronRight,
   Check,
+  CreditCard,
   LinkIcon,
   Loader2,
   Mail,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { useDocument } from "@/lib/hooks/use-documents";
+import { RecordPaymentModal } from "../../../sales-and-invoices/documents/components/record-payment-modal";
 import { adaptDocumentToQuotationRow } from "@/lib/document-adapter";
 import {
   QuotationPreview,
@@ -75,6 +77,7 @@ export default function ExpenditureDetailPage({
     useState<QuotationSettings>(DEFAULT_QUOTATION_SETTINGS);
   const [localBs, setLocalBs] = useState<BusinessSettingsRow>({});
   const [emailSheetOpen, setEmailSheetOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
 
   const settingsSeeded = useRef(false);
   useEffect(() => {
@@ -264,6 +267,22 @@ export default function ExpenditureDetailPage({
               {DOCUMENT_LABEL}
             </span>
             <DocumentStatusBadge status={doc.status} />
+            {(() => {
+              const s =
+                typeof doc.settings === "object" && doc.settings !== null
+                  ? (doc.settings as Record<string, unknown>)
+                  : {};
+              const paid = s.paymentStatus === "PAID";
+              return paid ? (
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700">
+                  Paid
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700">
+                  Unpaid
+                </span>
+              );
+            })()}
           </div>
 
           {/* Right: create button */}
@@ -306,6 +325,36 @@ export default function ExpenditureDetailPage({
             <Pencil className="size-4" />
             <span>Edit</span>
           </button>
+
+          <div className="mx-1 h-8 w-px bg-zinc-200" />
+
+          {/* Mark as Paid */}
+          {(() => {
+            const s =
+              typeof doc.settings === "object" && doc.settings !== null
+                ? (doc.settings as Record<string, unknown>)
+                : {};
+            const paid = s.paymentStatus === "PAID";
+            return paid ? (
+              <button
+                type="button"
+                disabled
+                className="flex flex-col items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 cursor-default"
+              >
+                <CreditCard className="size-4" />
+                <span>Paid</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPayOpen(true)}
+                className="flex flex-col items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+              >
+                <CreditCard className="size-4" />
+                <span>Mark as Paid</span>
+              </button>
+            );
+          })()}
 
           <div className="mx-1 h-8 w-px bg-zinc-200" />
 
@@ -395,6 +444,25 @@ export default function ExpenditureDetailPage({
         documentId={id}
         clientEmail={clientEmail}
         documentLabel={DOCUMENT_LABEL}
+      />
+
+      {/* Record payment modal */}
+      <RecordPaymentModal
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        documentId={id}
+        payment={null}
+        invoice={{
+          documentNumber: doc.documentNumber,
+          clientName: doc.clientName ?? doc.fromName ?? null,
+          subTotal: doc.subTotal,
+          totalAmount: doc.totalAmount,
+          currency: doc.currency,
+        }}
+        onApproved={() => {
+          qc.invalidateQueries({ queryKey: ["documents", id] });
+          qc.invalidateQueries({ queryKey: ["expenditures"] });
+        }}
       />
     </div>
   );

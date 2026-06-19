@@ -9,8 +9,16 @@ import {
   isQuotationFormPayload,
   quotationFormToDocumentUpdate,
 } from "@/lib/document-adapter";
+import { syncBuyerExpenditureOnVendorInvoicePaid } from "@/lib/sync-vendor-payment";
 
 type RouteCtx = { params: Promise<{ id: string }> };
+
+function parseDocSettings(settings: unknown): Record<string, unknown> {
+  if (typeof settings === "object" && settings !== null) {
+    return settings as Record<string, unknown>;
+  }
+  return {};
+}
 
 function enrichItems(items: QuotationItemInput[]) {
   return items.map((item) => {
@@ -90,8 +98,24 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
       })
     : null;
 
+  const existingSettings = parseDocSettings(existing.settings);
+  const mergedSettings =
+    data.settings !== undefined
+      ? { ...existingSettings, ...data.settings }
+      : existingSettings;
+  const shouldSyncBuyerExpenditure =
+    !existing.purchasedAt &&
+    data.settings !== undefined &&
+    existingSettings.paymentStatus !== "PAID" &&
+    mergedSettings.paymentStatus === "PAID";
+  const syncPaymentDate =
+    typeof mergedSettings.paymentDate === "string" && mergedSettings.paymentDate
+      ? mergedSettings.paymentDate
+      : new Date().toISOString();
+
   try {
-    const document = await prisma.document.update({
+    const document = await prisma.$transaction(async (tx) => {
+      const updated = await tx.document.update({
       where: { id },
       data: {
         ...(data.title !== undefined && { title: data.title || null }),
@@ -171,6 +195,13 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         items: { orderBy: { sortOrder: "asc" } },
         client: { select: { id: true, businessName: true, email: true } },
       },
+    });
+
+      if (shouldSyncBuyerExpenditure) {
+        await syncBuyerExpenditureOnVendorInvoicePaid(tx, id, syncPaymentDate);
+      }
+
+      return updated;
     });
 
     return NextResponse.json({ document });

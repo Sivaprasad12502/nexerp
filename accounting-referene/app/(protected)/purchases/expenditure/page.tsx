@@ -160,11 +160,11 @@ export default function ExpenditurePage() {
   const filteredExpenditures = useMemo(() => {
     let result = allExpenditures;
 
-    if (viewMode === "paid") result = result.filter((e) => Boolean(e.purchasedAt));
-    // "active" = all (all expenditures are "paid" via PO conversion, no draft state)
+    if (viewMode === "paid") result = result.filter((e) => e.paymentStatus === "PAID");
+    // "active" = all expenditures
 
-    if (filterStatus === "paid") result = result.filter((e) => Boolean(e.purchasedAt));
-    if (filterStatus === "unpaid") result = result.filter((e) => !e.purchasedAt);
+    if (filterStatus === "paid") result = result.filter((e) => e.paymentStatus === "PAID");
+    if (filterStatus === "unpaid") result = result.filter((e) => e.paymentStatus !== "PAID");
 
     if (filterVendor) {
       const q = filterVendor.toLowerCase();
@@ -746,14 +746,21 @@ export default function ExpenditurePage() {
                           )}
                           {columns.status && (
                             <td className="px-3 py-2.5">
-                              {/* Payment status is stub */}
-                              <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 bg-orange-50 text-orange-700 ring-orange-200">
-                                Unpaid
-                              </span>
+                              {exp.paymentStatus === "PAID" ? (
+                                <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 bg-emerald-50 text-emerald-700 ring-emerald-200">
+                                  Paid
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 bg-orange-50 text-orange-700 ring-orange-200">
+                                  Unpaid
+                                </span>
+                              )}
                             </td>
                           )}
                           {columns.paymentDate && (
-                            <td className="px-3 py-2.5 text-zinc-400">—</td>
+                            <td className="px-3 py-2.5 text-zinc-700">
+                              {exp.paymentDate ? fmt(exp.paymentDate) : "—"}
+                            </td>
                           )}
                           {columns.expenditure && (
                             <td className="px-3 py-2.5">

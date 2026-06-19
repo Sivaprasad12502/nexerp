@@ -109,3 +109,107 @@ export async function loadSellerSnapshot(tx: Db, sellerBusinessId: string) {
     },
   });
 }
+
+// ─── Client auto-provisioning (PO accept: buyer becomes a client in vendor's account) ──
+
+type BuyerSnapshot = SellerSnapshot; // same shape
+
+type PoSnapshot = {
+  fromAddress: string | null;
+};
+
+export type EnsureClientRelationshipResult = {
+  relationshipId: string;
+  clientId: string;
+  clientCreated: boolean;
+};
+
+/**
+ * Load buyer business snapshot needed for client provisioning.
+ * Same shape as loadSellerSnapshot — aliased for clarity at the call site.
+ */
+export async function loadBuyerSnapshot(tx: Db, buyerBusinessId: string) {
+  return tx.business.findUnique({
+    where: { id: buyerBusinessId },
+    select: {
+      name: true,
+      brandName: true,
+      phone: true,
+      website: true,
+      gstNumber: true,
+      country: true,
+      user: { select: { email: true } },
+    },
+  });
+}
+
+/**
+ * Upsert BusinessRelationship and linked Client in the vendor's (seller's) business.
+ * Called when a vendor accepts a purchase order so the PO issuer (buyer) is auto-created
+ * as a Client in the vendor's client a/c. Idempotent — safe to call when already exists.
+ */
+export async function ensureClientRelationship(
+  tx: Db,
+  {
+    buyerBusinessId,
+    sellerBusinessId,
+    buyerSnapshot,
+    po,
+  }: {
+    buyerBusinessId: string;
+    sellerBusinessId: string;
+    buyerSnapshot: BuyerSnapshot;
+    po: PoSnapshot;
+  },
+): Promise<EnsureClientRelationshipResult> {
+  // Upsert the BusinessRelationship (buyer = PO issuer, seller = vendor accepting)
+  const relationship = await tx.businessRelationship.upsert({
+    where: {
+      buyerBusinessId_sellerBusinessId: { buyerBusinessId, sellerBusinessId },
+    },
+    create: { buyerBusinessId, sellerBusinessId, status: "ACTIVE" },
+    update: {},
+  });
+
+  const clientName = buyerSnapshot.brandName ?? buyerSnapshot.name;
+  const clientEmail = buyerSnapshot.user.email;
+  const clientAddress = po.fromAddress ?? buyerSnapshot.country ?? null;
+
+  // Check if the client already exists (to compute clientCreated)
+  const existingClient = await tx.client.findUnique({
+    where: {
+      businessId_linkedBusinessId: {
+        businessId: sellerBusinessId,
+        linkedBusinessId: buyerBusinessId,
+      },
+    },
+    select: { id: true },
+  });
+
+  const client = await tx.client.upsert({
+    where: {
+      businessId_linkedBusinessId: {
+        businessId: sellerBusinessId,
+        linkedBusinessId: buyerBusinessId,
+      },
+    },
+    create: {
+      businessId: sellerBusinessId,
+      linkedBusinessId: buyerBusinessId,
+      businessName: clientName,
+      email: clientEmail || null,
+      phone: buyerSnapshot.phone || null,
+      trn: buyerSnapshot.gstNumber || null,
+      addressCountry: buyerSnapshot.country || null,
+      streetAddress: clientAddress,
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  return {
+    relationshipId: relationship.id,
+    clientId: client.id,
+    clientCreated: !existingClient,
+  };
+}

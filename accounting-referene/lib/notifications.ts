@@ -93,3 +93,28 @@ export async function notifyVendorLinked(
     entityId: quotationId,
   });
 }
+
+/**
+ * Notify the vendor (seller) when the PO issuer (buyer) is auto-linked as a Client
+ * after the vendor accepts a purchase order.
+ */
+export async function notifyClientLinked(
+  tx: Db,
+  {
+    vendorBusinessId,
+    buyerName,
+    documentId,
+  }: {
+    vendorBusinessId: string;
+    buyerName: string;
+    documentId: string;
+  },
+) {
+  await notifyBusinessOwner(tx, vendorBusinessId, {
+    type: NotificationType.CLIENT_LINKED,
+    title: "New client linked",
+    message: `${buyerName} has been added to your clients after you accepted their purchase order.`,
+    entityType: "DOCUMENT",
+    entityId: documentId,
+  });
+}
