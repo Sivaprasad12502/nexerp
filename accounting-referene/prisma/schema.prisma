@@ -73,6 +73,7 @@ model Business {
 
   businessSettings BusinessSettings?
   paymentAccounts  PaymentAccount[]
+  vendorLeads      VendorLead[]
 }
 
 // ─── Business Settings (branding + finance defaults) ──────────────────────────
@@ -624,6 +625,13 @@ enum VendorType {
   COMPANY
 }
 
+enum VendorLeadStatus {
+  ACTIVE
+  CONVERTED
+  REJECTED
+  ARCHIVED
+}
+
 enum BusinessRelationshipStatus {
   ACTIVE
   BLOCKED
@@ -678,10 +686,58 @@ model Vendor {
   updatedAt DateTime     @updatedAt
 
   linkedContacts VendorContact[]
+  convertedFromLeads VendorLead[]
 
   // NULL values are distinct in PG, so manual vendors (linkedBusinessId = NULL) don't collide with each other
   @@unique([businessId, linkedBusinessId])
   @@index([businessId, status])
+}
+
+/// Prospective supplier before conversion to an active Vendor.
+model VendorLead {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name       String
+  email      String?
+  phoneCode  String?    @default("+91")
+  phone      String?
+  vendorType VendorType @default(INDIVIDUAL)
+  subject    String?
+  notes      String?
+
+  country       String?
+  state         String?
+  city          String?
+  postalCode    String?
+  streetAddress String?
+
+  gstNumber    String?
+  gstStateCode String?
+  panNumber    String?
+  nameAsPerPan String?
+
+  workflowName      String?
+  currentAssigneeId String?
+  currentStage      String?
+  currentStatus     String? @default("Pending")
+
+  status            VendorLeadStatus @default(ACTIVE)
+  convertedVendorId String?
+  convertedVendor   Vendor?          @relation(fields: [convertedVendorId], references: [id], onDelete: SetNull)
+  convertedAt       DateTime?
+
+  paymentAccountId String?
+  paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+
+  customFields Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
 }
 
 model VendorContact {
@@ -987,7 +1043,8 @@ model PaymentAccount {
   customFields        Json?     // [{ label: string, value: string }]
   linkedBankAccountId String?
 
-  payments  Payment[]
+  payments     Payment[]
+  vendorLeads  VendorLead[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
