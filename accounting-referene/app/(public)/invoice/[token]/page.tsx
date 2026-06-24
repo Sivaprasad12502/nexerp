@@ -283,17 +283,30 @@ export default function PublicInvoicePage() {
         const body = await r.json();
         if (!r.ok)
           throw new Error(body.error ?? "Failed to add as expenditure");
-        return body as { document: { id: string }; created: boolean };
+        return body as {
+          document: { id: string };
+          created: boolean;
+          vendorCreated?: boolean;
+        };
       }),
     onSuccess: (result) => {
       setLocalExpenditureId(result.document.id);
       setLocalExpenditureDeclined(false);
       setExpenditureModalStep("none");
-      toast.success(
-        result.created
-          ? "Invoice added to your expenditures."
-          : "Already added to your expenditures.",
-      );
+      const sellerName = document?.fromName?.trim();
+      if (result.vendorCreated && sellerName) {
+        toast.success(
+          result.created
+            ? `Invoice added to your expenditures. ${sellerName} was added to your vendors.`
+            : `Already added to your expenditures. ${sellerName} was added to your vendors.`,
+        );
+      } else {
+        toast.success(
+          result.created
+            ? "Invoice added to your expenditures."
+            : "Already added to your expenditures.",
+        );
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });

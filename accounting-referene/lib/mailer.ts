@@ -573,3 +573,52 @@ export async function sendInvoiceEmail(args: InvoiceEmailArgs): Promise<boolean>
     return false;
   }
 }
+
+type PaymentReceiptEmailArgs = {
+  to: string;
+  cc?: string[];
+  replyTo?: string;
+  subject: string;
+  message: string;
+  businessName: string;
+};
+
+/** Send payment receipt to client. Never throws. */
+export async function sendPaymentReceiptEmail(args: PaymentReceiptEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, cc, replyTo, subject, message, businessName } = args;
+
+  const bodyHtml = message
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px 0;color:#444">${line || "&nbsp;"}</p>`)
+    .join("");
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      ...(cc && cc.length > 0 && { cc }),
+      ...(replyTo && { replyTo }),
+      subject,
+      text: `${message}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            ${bodyHtml}
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send payment receipt email", err);
+    }
+    return false;
+  }
+}

@@ -95,6 +95,43 @@ export async function notifyVendorLinked(
 }
 
 /**
+ * Notify buyer and seller when a vendor is auto-linked from an invoice expenditure.
+ */
+export async function notifyVendorLinkedFromInvoice(
+  tx: Db,
+  {
+    buyerUserId,
+    sellerBusinessId,
+    invoiceDocumentId,
+    sellerName,
+    buyerBusinessName,
+  }: {
+    buyerUserId: string;
+    sellerBusinessId: string;
+    invoiceDocumentId: string;
+    sellerName: string;
+    buyerBusinessName: string;
+  },
+) {
+  await createNotification(tx, {
+    userId: buyerUserId,
+    type: NotificationType.VENDOR_LINKED,
+    title: "New vendor linked",
+    message: `${sellerName} has been added to your vendors after adding their invoice as an expenditure.`,
+    entityType: "DOCUMENT",
+    entityId: invoiceDocumentId,
+  });
+
+  await notifyBusinessOwner(tx, sellerBusinessId, {
+    type: NotificationType.VENDOR_LINKED,
+    title: "New customer connected",
+    message: `${buyerBusinessName} added your invoice to their expenditures and is now linked as a customer.`,
+    entityType: "DOCUMENT",
+    entityId: invoiceDocumentId,
+  });
+}
+
+/**
  * Notify the vendor (seller) when the PO issuer (buyer) is auto-linked as a Client
  * after the vendor accepts a purchase order.
  */

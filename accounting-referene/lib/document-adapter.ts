@@ -1,3 +1,4 @@
+import { formatReceiptAmount } from "@/lib/payment-receipt-format";
 import type { DocumentDetail } from "@/lib/hooks/use-documents";
 import type { QuotationRow } from "@/app/(protected)/sales-and-invoices/quotation-estimates/components/quotation-form";
 import type { QuotationCreateInput } from "@/lib/validations/quotation";
@@ -187,7 +188,25 @@ export function getVendorEmailFromDocument(doc: {
   return null;
 }
 
-export function formatCurrency(amount: number, currency: string): string {
+export type CurrencyFormatOptions = {
+  numberFormat?: string;
+  decimalDigits?: number;
+  customCurrencySymbol?: string | null;
+};
+
+export function formatCurrency(
+  amount: number,
+  currency: string,
+  formatOpts?: CurrencyFormatOptions,
+): string {
+  if (formatOpts) {
+    return formatReceiptAmount(amount, {
+      currency,
+      numberFormat: formatOpts.numberFormat,
+      decimalDigits: formatOpts.decimalDigits,
+      customCurrencySymbol: formatOpts.customCurrencySymbol,
+    });
+  }
   const isInr =
     currency.includes("INR") ||
     currency.includes("₹") ||

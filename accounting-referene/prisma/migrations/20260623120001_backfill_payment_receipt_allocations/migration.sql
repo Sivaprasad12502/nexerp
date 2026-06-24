@@ -1,0 +1,3 @@
+-- Data backfill for payment receipt allocations is handled by:
+--   npx tsx scripts/backfill-payment-receipt-allocations.ts
+-- (creates SETTLED payment receipts for existing APPROVED invoice payments)

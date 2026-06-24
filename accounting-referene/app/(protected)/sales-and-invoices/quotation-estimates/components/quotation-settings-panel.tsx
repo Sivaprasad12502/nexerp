@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { uploadFile } from "@/lib/upload";
+import { formatReceiptAmount } from "@/lib/payment-receipt-format";
 import { toast } from "sonner";
 import type { QuotationSettings } from "@/lib/validations/quotation";
 import type { BusinessSettingsRow } from "./quotation-preview";
@@ -107,6 +108,11 @@ function TemplatePicker({
   onChange: (t: string) => void;
 }) {
   const [idx, setIdx] = useState(() => TEMPLATES.findIndex((t) => t.id === value) ?? 0);
+
+  useEffect(() => {
+    const i = TEMPLATES.findIndex((t) => t.id === value);
+    if (i >= 0) setIdx(i);
+  }, [value]);
 
   const go = (dir: -1 | 1) => {
     const next = (idx + dir + TEMPLATES.length) % TEMPLATES.length;
@@ -313,17 +319,31 @@ export function QuotationSettingsPanel({
   businessSettings,
   onBusinessSettingsChange,
   documentLabel = "Quotation",
+  variant = "quotation",
+  paymentRecords,
 }: {
   settings: QuotationSettings;
   onSettingsChange: (patch: Partial<QuotationSettings>) => void;
   businessSettings: BusinessSettingsRow;
   onBusinessSettingsChange: (patch: Partial<BusinessSettingsRow>) => void;
   documentLabel?: string;
+  variant?: "quotation" | "paymentReceipt";
+  paymentRecords?: {
+    method: string;
+    methodLabel: string;
+    amountReceived: number;
+    paymentAccountName: string | null;
+    currency: string;
+    numberFormat: string;
+    decimalDigits: number;
+    customCurrencySymbol?: string | null;
+  }[];
 }) {
   const s = settings;
   const bs = businessSettings;
   const set = (patch: Partial<QuotationSettings>) => onSettingsChange(patch);
   const setBs = (patch: Partial<BusinessSettingsRow>) => onBusinessSettingsChange(patch);
+  const isPaymentReceipt = variant === "paymentReceipt";
 
   return (
     <div className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-100 overflow-hidden">
@@ -331,7 +351,8 @@ export function QuotationSettingsPanel({
         <h2 className="font-semibold text-zinc-900">{documentLabel} Settings</h2>
       </div>
 
-      {/* ── Advanced Settings ── */}
+      {/* ── Advanced Settings (quotations/documents only) ── */}
+      {!isPaymentReceipt && (
       <Section title="Advanced Settings" defaultOpen={false}>
         <div className="space-y-0.5">
           <div className="mb-3">
@@ -358,6 +379,7 @@ export function QuotationSettingsPanel({
           <Toggle label="Show HSN Summary" checked={s.showHsnSummary} onChange={(v) => set({ showHsnSummary: v })} />
         </div>
       </Section>
+      )}
 
       {/* ── Customize Design ── */}
       <Section title={`Customize ${documentLabel} Design`} badge="✨" defaultOpen={true}>
@@ -616,7 +638,8 @@ export function QuotationSettingsPanel({
         )}
       </Section>
 
-      {/* ── Batch Summary ── */}
+      {/* ── Batch Summary (quotations/documents only) ── */}
+      {!isPaymentReceipt && (
       <Section title="Batch Summary" defaultOpen={false}>
         <Toggle
           label={`Show Batch Summary in ${documentLabel}`}
@@ -630,6 +653,39 @@ export function QuotationSettingsPanel({
           </p>
         )}
       </Section>
+      )}
+
+      {isPaymentReceipt && (
+        <Section title="Payment Records" defaultOpen>
+          {paymentRecords && paymentRecords.length > 0 ? (
+            <ul className="space-y-2">
+              {paymentRecords.map((line, i) => (
+                <li
+                  key={i}
+                  className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs"
+                >
+                  <div className="flex justify-between gap-2 font-medium text-zinc-800">
+                    <span>{line.methodLabel}</span>
+                    <span>
+                      {formatReceiptAmount(line.amountReceived, {
+                        currency: line.currency,
+                        numberFormat: line.numberFormat,
+                        decimalDigits: line.decimalDigits,
+                        customCurrencySymbol: line.customCurrencySymbol ?? null,
+                      })}
+                    </span>
+                  </div>
+                  {line.paymentAccountName && (
+                    <p className="mt-0.5 text-zinc-500">{line.paymentAccountName}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-zinc-500">No payment records.</p>
+          )}
+        </Section>
+      )}
     </div>
   );
 }

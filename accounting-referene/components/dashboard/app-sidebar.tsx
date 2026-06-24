@@ -58,7 +58,7 @@ const items: NavItem[] = [
       // { label: "Documents", href: "/sales-and-invoices/documents" },
       { label: "Proforma Invoices", href: "/sales-and-invoices/proforma-invoices" },
       { label: "Invoices", href: "/sales-and-invoices/invoice" },
-      { label: "Payment Receipts", href: "/sales/payment-receipts" },
+      { label: "Payment Receipts", href: "/sales-and-invoices/payement-receipts" },
       { label: "Sales Orders", href: "/sales-and-invoices/sales-order" },
       { label: "Delivery Challans", href: "/sales/delivery-challans" },
       { label: "Credit Notes", href: "/sales/credit-notes" },

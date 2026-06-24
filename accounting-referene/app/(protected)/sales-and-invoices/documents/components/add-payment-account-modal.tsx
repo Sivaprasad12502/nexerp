@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Building2, Plus, User, Wallet, X } from "lucide-react";
+import { toast } from "sonner";
 import {
   useCreatePaymentAccount,
   useUpdatePaymentAccount,
@@ -10,6 +11,9 @@ import {
 } from "@/lib/hooks/use-payment-accounts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type AccountTypeChoice = "BANK" | "EMPLOYEE" | "OTHER";
+type ModalStep = "type" | "form";
 
 type BankFormState = {
   country: string;
@@ -56,6 +60,8 @@ export function AddPaymentAccountModal({
 }) {
   const isEdit = !!initialData;
 
+  const [step, setStep] = useState<ModalStep>("type");
+  const [accountTypeChoice, setAccountTypeChoice] = useState<AccountTypeChoice>("BANK");
   const [form, setForm] = useState<BankFormState>(EMPTY_FORM);
   const [showSwift, setShowSwift] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof BankFormState, string>>>({});
@@ -67,6 +73,7 @@ export function AddPaymentAccountModal({
   useEffect(() => {
     if (!open) return;
     if (initialData) {
+      setStep("form");
       const cf = Array.isArray(initialData.customFields)
         ? (initialData.customFields as PaymentAccountCustomField[])
         : [];
@@ -84,6 +91,8 @@ export function AddPaymentAccountModal({
       });
       setShowSwift(!!initialData.swift);
     } else {
+      setStep("type");
+      setAccountTypeChoice("BANK");
       setForm(EMPTY_FORM);
       setShowSwift(false);
     }
@@ -143,10 +152,20 @@ export function AddPaymentAccountModal({
   };
 
   const handleClose = () => {
+    setStep("type");
+    setAccountTypeChoice("BANK");
     setForm(EMPTY_FORM);
     setShowSwift(false);
     setErrors({});
     onClose();
+  };
+
+  const handleTypeContinue = () => {
+    if (accountTypeChoice === "BANK") {
+      setStep("form");
+      return;
+    }
+    toast.info("Coming soon");
   };
 
   const addCustomField = () =>
@@ -190,7 +209,11 @@ export function AddPaymentAccountModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
           <h3 className="text-base font-semibold text-zinc-900">
-            {isEdit ? "Edit Bank Account" : "Add New Bank Account"}
+            {isEdit
+              ? "Edit Bank Account"
+              : step === "type"
+                ? "Add New Payment Account"
+                : "Add New Bank Account"}
           </h3>
           <button
             type="button"
@@ -201,8 +224,73 @@ export function AddPaymentAccountModal({
           </button>
         </div>
 
+        {step === "type" && !isEdit ? (
+          <>
+            <div className="px-6 py-6">
+              <p className="mb-5 text-center text-sm text-zinc-600">
+                Which account would you like to add?
+              </p>
+              <div className="space-y-3">
+                <TypeCard
+                  selected={accountTypeChoice === "BANK"}
+                  onSelect={() => setAccountTypeChoice("BANK")}
+                  icon={Building2}
+                  title="Bank Account"
+                  description="All types of bank accounts"
+                />
+                <TypeCard
+                  selected={accountTypeChoice === "EMPLOYEE"}
+                  onSelect={() => setAccountTypeChoice("EMPLOYEE")}
+                  icon={User}
+                  title="Employee Account"
+                  description="Add your employees to manage and track salaries & reimbursements."
+                />
+                <TypeCard
+                  selected={accountTypeChoice === "OTHER"}
+                  onSelect={() => setAccountTypeChoice("OTHER")}
+                  icon={Wallet}
+                  title="Other Account"
+                  description="Cash, Debit/Credit cards, UPI, Wallets and more"
+                />
+              </div>
+              <div className="mt-5 rounded-lg bg-zinc-50 px-4 py-3 text-xs text-zinc-600">
+                Add Accounts to easily manage and track your withdrawals, deposits, salaries,
+                reimbursements and more{" "}
+                <button type="button" className="text-[#7438dc] hover:underline">
+                  Learn More
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-zinc-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="text-sm text-zinc-600 hover:text-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleTypeContinue}
+                className="rounded-md bg-[#7438dc] px-6 py-2 text-sm font-semibold text-white hover:bg-[#6230c4]"
+              >
+                Continue
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
         {/* Form */}
         <div className="px-6 py-5 space-y-4">
+          {!isEdit && (
+            <button
+              type="button"
+              onClick={() => setStep("type")}
+              className="text-sm text-[#7438dc] hover:underline"
+            >
+              ← Back to account type
+            </button>
+          )}
           {/* Row 1: Country + Bank Name */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -425,7 +513,52 @@ export function AddPaymentAccountModal({
             {isPending ? "Saving…" : isEdit ? "Save Changes" : "Add Account"}
           </button>
         </div>
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+function TypeCard({
+  selected,
+  onSelect,
+  icon: Icon,
+  title,
+  description,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: typeof Building2;
+  title: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors ${
+        selected
+          ? "border-[#7438dc] bg-violet-50/40 ring-2 ring-[#7438dc]/20"
+          : "border-zinc-200 hover:bg-zinc-50"
+      }`}
+    >
+      <span
+        className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2 ${
+          selected ? "border-[#7438dc]" : "border-zinc-300"
+        }`}
+      >
+        {selected && <span className="size-2 rounded-full bg-[#7438dc]" />}
+      </span>
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <Icon className={`size-5 ${selected ? "text-[#7438dc]" : "text-zinc-400"}`} />
+          <span className={`font-semibold ${selected ? "text-[#7438dc]" : "text-zinc-800"}`}>
+            {title}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">{description}</p>
+      </div>
+    </button>
   );
 }

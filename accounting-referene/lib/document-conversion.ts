@@ -26,6 +26,7 @@ import {
 import {
   notifyBusinessOwner,
   notifyClientLinked,
+  notifyVendorLinkedFromInvoice,
   NotificationType,
 } from "@/lib/notifications";
 import { getClientDisplayName, getQuotationLabel } from "@/lib/quotation-display";
@@ -1160,7 +1161,40 @@ export async function convertInvoiceToBuyerExpenditure(
       );
     }
 
-    // ── 3. Idempotency: check if buyer already added this invoice ───────────
+    // ── 3. Load buyer business + auto-provision seller as vendor ────────────
+    const buyerBusiness = await tx.business.findUnique({
+      where: { id: buyerBusinessId },
+      select: { name: true, brandName: true, country: true, gstNumber: true },
+    });
+
+    if (!buyerBusiness) {
+      throw new ConversionError("NO_BUSINESS", "Buyer business not found.");
+    }
+
+    const buyerFromName = buyerBusiness.brandName ?? buyerBusiness.name;
+
+    let vendorCreated = false;
+    const sellerSnapshot = await loadSellerSnapshot(tx, invoice.businessId);
+    if (sellerSnapshot) {
+      const vendorResult = await ensureVendorRelationship(tx, {
+        buyerBusinessId,
+        sellerBusinessId: invoice.businessId,
+        sellerSnapshot,
+        quotation: { fromAddress: invoice.fromAddress },
+      });
+      vendorCreated = vendorResult.vendorCreated;
+      if (vendorCreated) {
+        await notifyVendorLinkedFromInvoice(tx, {
+          buyerUserId,
+          sellerBusinessId: invoice.businessId,
+          invoiceDocumentId,
+          sellerName: sellerSnapshot.brandName ?? sellerSnapshot.name,
+          buyerBusinessName: buyerFromName,
+        });
+      }
+    }
+
+    // ── 4. Idempotency: check if buyer already added this invoice ───────────
     const existingConversion = await tx.documentConversion.findFirst({
       where: {
         sourceType: "INVOICE",
@@ -1179,18 +1213,8 @@ export async function convertInvoiceToBuyerExpenditure(
         include: { items: { orderBy: { sortOrder: "asc" } } },
       });
       if (existingExpenditure) {
-        return { document: existingExpenditure, created: false };
+        return { document: existingExpenditure, created: false, vendorCreated };
       }
-    }
-
-    // ── 4. Load buyer business ──────────────────────────────────────────────
-    const buyerBusiness = await tx.business.findUnique({
-      where: { id: buyerBusinessId },
-      select: { name: true, brandName: true, country: true, gstNumber: true },
-    });
-
-    if (!buyerBusiness) {
-      throw new ConversionError("NO_BUSINESS", "Buyer business not found.");
     }
 
     // ── 5. Generate expenditure document number ─────────────────────────────
@@ -1218,7 +1242,6 @@ export async function convertInvoiceToBuyerExpenditure(
     // ── 7. Perspective swap ─────────────────────────────────────────────────
     // In the invoice: fromName = seller, clientName = buyer.
     // In the expenditure: fromName = buyer (us), clientName = seller (vendor).
-    const buyerFromName = buyerBusiness.brandName ?? buyerBusiness.name;
     const buyerFromAddress = buyerBusiness.country ?? null;
     const buyerFromGstin = buyerBusiness.gstNumber ?? null;
 
@@ -1323,7 +1346,7 @@ export async function convertInvoiceToBuyerExpenditure(
       entityId: invoiceDocumentId,
     });
 
-    return { document: expenditure, created: true };
+    return { document: expenditure, created: true, vendorCreated };
   });
 }
 

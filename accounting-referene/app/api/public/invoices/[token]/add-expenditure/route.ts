@@ -76,7 +76,11 @@ export async function POST(_req: NextRequest, { params }: RouteCtx) {
     });
 
     return NextResponse.json(
-      { document: result.document, created: result.created },
+      {
+        document: result.document,
+        created: result.created,
+        vendorCreated: result.vendorCreated,
+      },
       { status: result.created ? 201 : 200 },
     );
   } catch (err: unknown) {

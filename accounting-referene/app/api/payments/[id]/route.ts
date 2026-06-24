@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
+import { syncPaymentReceiptForApprovedPayment } from "@/lib/payment-receipt-sync";
 import { syncBuyerExpenditureOnVendorInvoicePaid } from "@/lib/sync-vendor-payment";
 import { paymentApproveSchema } from "@/lib/validations/payment";
 
@@ -85,6 +86,12 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         existing.documentId,
         existing.paymentDate.toISOString(),
       );
+
+      await syncPaymentReceiptForApprovedPayment(tx, {
+        payment: p,
+        document: existing.document,
+        userId: ctx.userId,
+      });
     }
 
     return p;

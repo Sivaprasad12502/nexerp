@@ -74,6 +74,7 @@ model Business {
   businessSettings BusinessSettings?
   paymentAccounts  PaymentAccount[]
   vendorLeads      VendorLead[]
+  paymentReceipts  PaymentReceipt[]
 }
 
 // ─── Business Settings (branding + finance defaults) ──────────────────────────
@@ -235,6 +236,7 @@ model Client {
   linkedContacts ClientContact[]
   quotations     Quotation[]
   documents      Document[]
+  paymentReceipts PaymentReceipt[]
 
   // NULL values are distinct in PG, so manual clients (linkedBusinessId = NULL) don't collide with each other
   @@unique([businessId, linkedBusinessId])
@@ -894,6 +896,7 @@ model Document {
 
   items    DocumentItem[]
   payments Payment[]
+  paymentReceiptAllocations PaymentReceiptAllocation[]
 
   @@index([businessId, type, status])
   @@index([businessId, createdAt])
@@ -1004,6 +1007,8 @@ model Payment {
   paymentAccountId String?
   paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
 
+  paymentReceiptAllocation PaymentReceiptAllocation?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1045,9 +1050,90 @@ model PaymentAccount {
 
   payments     Payment[]
   vendorLeads  VendorLead[]
+  paymentReceiptLines PaymentReceiptLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([businessId])
+}
+
+// ─── Payment Receipts ─────────────────────────────────────────────────────────
+
+enum PaymentReceiptType {
+  PAYMENT_RECEIPT
+  CLIENT_ADVANCE
+}
+
+enum PaymentReceiptStatus {
+  DRAFT
+  ACTIVE
+  SETTLED
+  ADVANCE
+  ARCHIVED
+}
+
+model PaymentReceipt {
+  id                   String               @id @default(cuid())
+  businessId           String
+  business             Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  receiptNumber        String
+  type                 PaymentReceiptType   @default(PAYMENT_RECEIPT)
+  status               PaymentReceiptStatus @default(ACTIVE)
+
+  clientId             String?
+  client               Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  receiptDate          DateTime             @default(now())
+  currency             String               @default("INR")
+
+  numberFormat         String               @default("en-IN")
+  decimalDigits        Int                  @default(2)
+  customCurrencySymbol String?
+
+  totalAmount          Float                @default(0)
+  emailSentAt          DateTime?
+
+  notes                String?
+  signature            String?
+  additionalInfo       String?
+  contactDetails       String?
+  attachments          String[]             @default([])
+
+  settings             Json                 @default("{}")
+
+  lines                PaymentReceiptLine[]
+  allocations          PaymentReceiptAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, receiptNumber])
+  @@index([businessId, status])
+  @@index([businessId, receiptDate])
+}
+
+model PaymentReceiptLine {
+  id                   String         @id @default(cuid())
+  receiptId            String
+  receipt              PaymentReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  paymentAccountId     String?
+  paymentAccount       PaymentAccount?  @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  method               PaymentMethod  @default(ACCOUNT_TRANSFER)
+  refId                String?
+  amountReceived       Float
+  amountInBaseCurrency Float?
+  transactionCharge    Float          @default(0)
+  tags                 String[]
+  sortOrder            Int            @default(0)
+}
+
+model PaymentReceiptAllocation {
+  id              String         @id @default(cuid())
+  receiptId       String
+  receipt         PaymentReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  documentId      String
+  document        Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  amountAllocated Float
+  paymentId       String?        @unique
+  payment         Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 }
