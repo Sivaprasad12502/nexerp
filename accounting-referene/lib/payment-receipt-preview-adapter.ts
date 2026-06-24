@@ -68,6 +68,6 @@ export function adaptPaymentReceiptForPreview(
 export function receiptStatusBadge(status: string, type: string): string {
   if (status === "DRAFT") return "Draft";
   if (status === "SETTLED") return "Settled";
-  if (type === "CLIENT_ADVANCE" || status === "ADVANCE") return "Advance";
+  if (status === "ADVANCE" || type === "CLIENT_ADVANCE") return "Advance";
   return status;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { formatReceiptAmount } from "@/lib/payment-receipt-format";
 import type { PaymentReceiptPreviewData } from "@/lib/payment-receipt-preview-adapter";
 import { receiptStatusBadge } from "@/lib/payment-receipt-preview-adapter";
@@ -34,6 +35,7 @@ type Props = {
   numberFormat: string;
   decimalDigits: number;
   customCurrencySymbol?: string | null;
+  children?: ReactNode;
 };
 
 type HeaderProps = {
@@ -65,8 +67,13 @@ function Letterhead({ settings, bs }: { settings: QuotationSettings; bs: Busines
 }
 
 function StatusBadge({ badge }: { badge: string }) {
+  const isSettled = badge === "Settled";
   return (
-    <span className="rounded bg-orange-400 px-2 py-0.5 text-xs font-semibold text-white">
+    <span
+      className={`rounded px-2 py-0.5 text-xs font-semibold text-white ${
+        isSettled ? "bg-emerald-500" : "bg-orange-400"
+      }`}
+    >
       {badge}
     </span>
   );
@@ -385,6 +392,7 @@ export function PaymentReceiptPreview({
   numberFormat,
   decimalDigits,
   customCurrencySymbol,
+  children,
 }: Props) {
   const themeColor = settings.themeColor || "#7438dc";
   const formatOpts = {
@@ -442,6 +450,8 @@ export function PaymentReceiptPreview({
           themeColor={themeColor}
           fmt={fmt}
         />
+
+        {children}
       </div>
     </div>
   );

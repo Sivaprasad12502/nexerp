@@ -21,7 +21,14 @@ export const paymentReceiptAllocationInclude = {
 } as const;
 
 export const paymentReceiptIncludeRelations = {
-  business: { select: { name: true, brandName: true, country: true } },
+  business: {
+    select: {
+      name: true,
+      brandName: true,
+      country: true,
+      businessSettings: true,
+    },
+  },
   client: { select: { id: true, businessName: true, email: true, country: true } },
   lines: {
     orderBy: { sortOrder: "asc" as const },

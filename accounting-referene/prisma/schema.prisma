@@ -1092,6 +1092,7 @@ model PaymentReceipt {
 
   totalAmount          Float                @default(0)
   emailSentAt          DateTime?
+  approvalToken        String?              @unique
 
   notes                String?
   signature            String?

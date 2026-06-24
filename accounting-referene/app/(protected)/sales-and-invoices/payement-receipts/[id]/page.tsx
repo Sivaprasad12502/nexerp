@@ -26,19 +26,65 @@ import {
 } from "../../quotation-estimates/components/quotation-settings-panel";
 import type { BusinessSettingsRow } from "../../quotation-estimates/components/quotation-preview";
 import { PaymentReceiptPreview } from "../components/payment-receipt-preview";
+import { SettledInvoicesTable } from "../components/settled-invoices-table";
 import { EmailPaymentReceiptSheet } from "../components/email-payment-receipt-sheet";
 import { ActionMenu } from "../../clients-prospects/components/action-menu";
 import { METHOD_LABELS } from "@/components/shared/payment-form-fields";
 
 function ActionToolbar({
+  receiptId,
+  approvalToken,
+  receiptNumber,
   onEdit,
   onPrint,
   onEmail,
+  onShareLinkReady,
 }: {
+  receiptId: string;
+  approvalToken: string | null;
+  receiptNumber: string;
   onEdit: () => void;
   onPrint: () => void;
   onEmail: () => void;
+  onShareLinkReady?: () => void;
 }) {
+  const resolveShareUrl = async (): Promise<string> => {
+    if (approvalToken) {
+      return `${window.location.origin}/payment-receipt/${approvalToken}`;
+    }
+    const res = await fetch(`/api/payment-receipts/${receiptId}/share-link`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        typeof body.error === "string" ? body.error : "Failed to create share link",
+      );
+    }
+    onShareLinkReady?.();
+    return body.viewUrl as string;
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      const url = await resolveShareUrl();
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to copy link");
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    try {
+      const url = await resolveShareUrl();
+      const text = `Payment Receipt ${receiptNumber}\n${url}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to share via WhatsApp");
+    }
+  };
+
   const shareActions = [
     {
       label: "Send Email",
@@ -48,12 +94,12 @@ function ActionToolbar({
     {
       label: "Send WhatsApp",
       icon: <MessageCircle className="size-4 text-green-500" />,
-      onClick: () => toast.info("WhatsApp sharing coming soon"),
+      onClick: handleWhatsApp,
     },
     {
       label: "Copy Link",
       icon: <LinkIcon className="size-4" />,
-      onClick: () => toast.info("Copy link coming soon"),
+      onClick: handleCopyLink,
     },
   ];
 
@@ -345,9 +391,15 @@ export default function PaymentReceiptViewPage({
 
         <div className="mx-auto mt-3 max-w-[1400px]">
           <ActionToolbar
+            receiptId={id}
+            approvalToken={receipt.approvalToken}
+            receiptNumber={receipt.receiptNumber}
             onEdit={handleEdit}
             onPrint={handlePrint}
             onEmail={() => setEmailSheetOpen(true)}
+            onShareLinkReady={() =>
+              qc.invalidateQueries({ queryKey: ["payment-receipts", id] })
+            }
           />
         </div>
       </div>
@@ -370,7 +422,14 @@ export default function PaymentReceiptViewPage({
               numberFormat={receipt.numberFormat}
               decimalDigits={receipt.decimalDigits}
               customCurrencySymbol={receipt.customCurrencySymbol}
-            />
+            >
+              {receipt.allocations.length > 0 && (
+                <SettledInvoicesTable
+                  receipt={receipt}
+                  themeColor={localSettings.themeColor || "#7438dc"}
+                />
+              )}
+            </PaymentReceiptPreview>
           </div>
 
           <div className="sticky top-[200px] w-[340px] shrink-0">
@@ -388,9 +447,15 @@ export default function PaymentReceiptViewPage({
 
         <div className="mt-4">
           <ActionToolbar
+            receiptId={id}
+            approvalToken={receipt.approvalToken}
+            receiptNumber={receipt.receiptNumber}
             onEdit={handleEdit}
             onPrint={handlePrint}
             onEmail={() => setEmailSheetOpen(true)}
+            onShareLinkReady={() =>
+              qc.invalidateQueries({ queryKey: ["payment-receipts", id] })
+            }
           />
         </div>
       </div>

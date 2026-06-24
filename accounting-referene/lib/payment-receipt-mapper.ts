@@ -71,6 +71,7 @@ export function mapPaymentReceiptRow(
     totalAmount: receipt.totalAmount,
     emailSentAt: receipt.emailSentAt?.toISOString() ?? null,
     emailSent: Boolean(receipt.emailSentAt),
+    approvalToken: receipt.approvalToken ?? null,
     notes: receipt.notes ?? null,
     signature: receipt.signature ?? null,
     additionalInfo: receipt.additionalInfo ?? null,

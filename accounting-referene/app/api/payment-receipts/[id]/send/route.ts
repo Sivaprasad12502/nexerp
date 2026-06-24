@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext, ctxCan } from "@/lib/rbac";
@@ -6,6 +7,10 @@ import { mapPaymentReceiptRow } from "@/lib/payment-receipt-mapper";
 import { paymentReceiptIncludeRelations } from "@/lib/payment-receipt-includes";
 import { sendPaymentReceiptEmail } from "@/lib/mailer";
 import { paymentReceiptSendSchema } from "@/lib/validations/payment-receipt";
+import {
+  buildPaymentReceiptPublicUrl,
+  resolveRequestOrigin,
+} from "@/lib/payment-receipt-utils";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -33,6 +38,11 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   const data = result.data;
   const businessName = existing.business.brandName ?? existing.business.name;
 
+  const approvalToken =
+    existing.approvalToken ?? crypto.randomBytes(32).toString("hex");
+  const origin = resolveRequestOrigin(req.headers);
+  const viewUrl = buildPaymentReceiptPublicUrl(origin, approvalToken);
+
   const emailSent = await sendPaymentReceiptEmail({
     to: data.to,
     cc: data.cc,
@@ -40,12 +50,16 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     subject: data.subject,
     message: data.message,
     businessName,
+    viewUrl,
   });
 
   const now = new Date();
   const receipt = await prisma.paymentReceipt.update({
     where: { id },
-    data: { emailSentAt: now },
+    data: {
+      emailSentAt: now,
+      approvalToken,
+    },
     include: paymentReceiptIncludeRelations,
   });
 
@@ -53,6 +67,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     success: true,
     emailSent,
     sentAt: now,
+    viewUrl,
     paymentReceipt: mapPaymentReceiptRow(receipt),
   });
 }
