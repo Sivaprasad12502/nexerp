@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getRbacContext, ctxCan } from "@/lib/rbac";
 import {
-  buildPaymentReceiptPublicUrl,
+  buildPaymentReceiptClientViewUrl,
   resolveRequestOrigin,
 } from "@/lib/payment-receipt-utils";
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   }
 
   const origin = resolveRequestOrigin(req.headers);
-  const viewUrl = buildPaymentReceiptPublicUrl(origin, approvalToken);
+  const viewUrl = buildPaymentReceiptClientViewUrl(origin, approvalToken);
 
   return NextResponse.json({ viewUrl });
 }

@@ -50,7 +50,7 @@ function ActionToolbar({
 }) {
   const resolveShareUrl = async (): Promise<string> => {
     if (approvalToken) {
-      return `${window.location.origin}/payment-receipt/${approvalToken}`;
+      return `${window.location.origin}/sales-and-invoices/payement-receipts/received/${approvalToken}`;
     }
     const res = await fetch(`/api/payment-receipts/${receiptId}/share-link`, {
       method: "POST",

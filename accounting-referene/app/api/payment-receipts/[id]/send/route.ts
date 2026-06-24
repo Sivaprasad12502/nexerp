@@ -8,7 +8,7 @@ import { paymentReceiptIncludeRelations } from "@/lib/payment-receipt-includes";
 import { sendPaymentReceiptEmail } from "@/lib/mailer";
 import { paymentReceiptSendSchema } from "@/lib/validations/payment-receipt";
 import {
-  buildPaymentReceiptPublicUrl,
+  buildPaymentReceiptClientViewUrl,
   resolveRequestOrigin,
 } from "@/lib/payment-receipt-utils";
 
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   const approvalToken =
     existing.approvalToken ?? crypto.randomBytes(32).toString("hex");
   const origin = resolveRequestOrigin(req.headers);
-  const viewUrl = buildPaymentReceiptPublicUrl(origin, approvalToken);
+  const viewUrl = buildPaymentReceiptClientViewUrl(origin, approvalToken);
 
   const emailSent = await sendPaymentReceiptEmail({
     to: data.to,

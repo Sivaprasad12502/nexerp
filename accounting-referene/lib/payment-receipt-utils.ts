@@ -6,10 +6,10 @@ import { prisma } from "@/lib/prisma";
 export type { ReceiptFormatOptions } from "@/lib/payment-receipt-format";
 export { formatReceiptAmount, parseInvoicePaymentStatus } from "@/lib/payment-receipt-format";
 
-/** Build the public client view URL for a payment receipt. */
-export function buildPaymentReceiptPublicUrl(origin: string, token: string): string {
+/** Build the in-app client view URL for a payment receipt (requires login). */
+export function buildPaymentReceiptClientViewUrl(origin: string, token: string): string {
   const base = origin.replace(/\/$/, "");
-  return `${base}/payment-receipt/${token}`;
+  return `${base}/sales-and-invoices/payement-receipts/received/${token}`;
 }
 
 /** Mint a new 64-char hex approval token (same as document send flow). */

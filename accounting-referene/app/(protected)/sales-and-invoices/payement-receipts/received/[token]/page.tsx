@@ -5,8 +5,8 @@ import { useParams } from "next/navigation";
 import { AlertCircle, Clock, Download, Printer, Share2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { PaymentReceiptPreview } from "@/app/(protected)/sales-and-invoices/payement-receipts/components/payment-receipt-preview";
-import { SettledInvoicesTable } from "@/app/(protected)/sales-and-invoices/payement-receipts/components/settled-invoices-table";
+import { PaymentReceiptPreview } from "../../components/payment-receipt-preview";
+import { SettledInvoicesTable } from "../../components/settled-invoices-table";
 import type { BusinessSettingsRow } from "@/app/(protected)/sales-and-invoices/quotation-estimates/components/quotation-preview";
 import { DEFAULT_QUOTATION_SETTINGS } from "@/lib/quotation-defaults";
 import { adaptPaymentReceiptForPreview } from "@/lib/payment-receipt-preview-adapter";
@@ -19,7 +19,7 @@ type ApiResponse = {
   clientEmail: string | null;
 };
 
-export default function PublicPaymentReceiptPage() {
+export default function ReceivedPaymentReceiptPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
 
@@ -28,7 +28,7 @@ export default function PublicPaymentReceiptPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/public/payment-receipts/${token}`)
+    fetch(`/api/payment-receipts/received/${token}`)
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok) throw new Error(body.error ?? "Failed to load payment receipt");
@@ -55,7 +55,7 @@ export default function PublicPaymentReceiptPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-zinc-50">
+      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
         <div className="flex items-center gap-2 text-zinc-500">
           <Clock className="size-5 animate-pulse" />
           <span>Loading payment receipt…</span>
@@ -66,7 +66,7 @@ export default function PublicPaymentReceiptPage() {
 
   if (fetchError || !data) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-zinc-50 px-4">
+      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
         <div className="max-w-sm rounded-xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
           <AlertCircle className="mx-auto mb-4 size-10 text-red-400" />
           <h1 className="text-lg font-semibold text-zinc-900">Payment Receipt Unavailable</h1>
@@ -99,7 +99,7 @@ export default function PublicPaymentReceiptPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-zinc-50 pb-24">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50 pb-24">
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -119,7 +119,7 @@ export default function PublicPaymentReceiptPage() {
         }
       `}</style>
 
-      <div className="border-b border-zinc-200 bg-white px-6 py-4 sm:px-8">
+      <div className="border-b border-zinc-200 bg-white px-4 py-4 sm:px-6">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
           <button
             type="button"

@@ -104,7 +104,7 @@ export function isPublicDocumentCallback(callbackUrl: string | null | undefined)
     safe.startsWith("/purchase-order/") ||
     safe.startsWith("/sales-order/") ||
     safe.startsWith("/invoice/") ||
-    safe.startsWith("/payment-receipt/")
+    safe.startsWith("/sales-and-invoices/payement-receipts/received/")
   );
 }
 

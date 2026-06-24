@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
 import { mapPaymentReceiptRow } from "@/lib/payment-receipt-mapper";
 import { paymentReceiptIncludeRelations } from "@/lib/payment-receipt-includes";
 
 type RouteCtx = { params: Promise<{ token: string }> };
 
 /**
- * Public GET — client opens the payment receipt via the email link.
- * No auth required. Stamps seenAt in settings on first view.
+ * Authenticated GET — client opens a payment receipt from an email/share link.
+ * Requires login; session email must match the receipt client email.
  */
 export async function GET(_req: NextRequest, { params }: RouteCtx) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   const { token } = await params;
 
   const receipt = await prisma.paymentReceipt.findUnique({
@@ -22,6 +29,19 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     return NextResponse.json(
       { error: "Payment receipt not found or link is invalid." },
       { status: 404 },
+    );
+  }
+
+  const clientEmail = receipt.client?.email?.toLowerCase().trim() ?? "";
+  const sessionEmail = session.user.email?.toLowerCase().trim() ?? "";
+
+  if (!clientEmail || !sessionEmail || clientEmail !== sessionEmail) {
+    return NextResponse.json(
+      {
+        error:
+          "Only the intended recipient can view this payment receipt. Please sign in with the email address this receipt was sent to.",
+      },
+      { status: 403 },
     );
   }
 
