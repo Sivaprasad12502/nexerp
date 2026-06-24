@@ -91,6 +91,21 @@ export function useUnpaidInvoices(clientId: string | null) {
   });
 }
 
+export function useUnpaidProformaInvoices(clientId: string | null) {
+  return useQuery<{ proformaInvoices: UnpaidInvoiceRow[] }>({
+    queryKey: ["payment-receipts", "unpaid-proforma-invoices", clientId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/payment-receipts/unpaid-proforma-invoices?clientId=${encodeURIComponent(clientId!)}`,
+      );
+      if (!res.ok) throw new Error("Failed to load unpaid proforma invoices");
+      const data = await res.json();
+      return { proformaInvoices: data.proformaInvoices ?? [] };
+    },
+    enabled: Boolean(clientId),
+  });
+}
+
 export function useCreatePaymentReceipt() {
   const qc = useQueryClient();
   return useMutation({
@@ -108,6 +123,7 @@ export function useCreatePaymentReceipt() {
       toast.success("Payment receipt created");
       qc.invalidateQueries({ queryKey: ["payment-receipts"] });
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["proforma-invoices"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

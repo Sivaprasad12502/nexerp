@@ -47,6 +47,7 @@ export const paymentReceiptCreateSchema = z.object({
   customCurrencySymbol: z.string().optional().nullable(),
   lines: z.array(paymentReceiptLineSchema).min(1, "Add at least one payment record"),
   allocations: z.array(paymentReceiptAllocationSchema).default([]),
+  settlementDocumentType: z.enum(["INVOICE", "PROFORMA_INVOICE"]).default("INVOICE"),
   notes: z.string().optional().nullable(),
   signature: z.string().optional().nullable(),
   additionalInfo: z.string().optional().nullable(),

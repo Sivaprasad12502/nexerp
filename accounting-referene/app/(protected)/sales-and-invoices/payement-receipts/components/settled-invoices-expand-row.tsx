@@ -6,6 +6,11 @@ type Props = {
   colSpan: number;
 };
 
+function documentTypeLabel(type: string | null | undefined): string {
+  if (type === "PROFORMA_INVOICE") return "Proforma Invoice";
+  return "Invoice";
+}
+
 export function SettledInvoicesExpandRow({ receipt, colSpan }: Props) {
   const formatOpts = {
     numberFormat: receipt.numberFormat,
@@ -32,7 +37,8 @@ export function SettledInvoicesExpandRow({ receipt, colSpan }: Props) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-100/80 text-xs font-semibold text-zinc-700">
-              <th className="px-4 py-2.5 text-left">Invoice Number</th>
+              <th className="px-4 py-2.5 text-left">Document</th>
+              <th className="px-4 py-2.5 text-left">Number</th>
               <th className="px-4 py-2.5 text-right">Invoice Amount</th>
               <th className="px-4 py-2.5 text-right">Amount Settled</th>
               <th className="px-4 py-2.5 text-right">TDS Withheld</th>
@@ -44,6 +50,9 @@ export function SettledInvoicesExpandRow({ receipt, colSpan }: Props) {
               const currency = alloc.documentCurrency ?? receipt.currency;
               return (
                 <tr key={alloc.id} className="bg-white text-zinc-800">
+                  <td className="px-4 py-2.5 text-zinc-600">
+                    {documentTypeLabel(alloc.documentType)}
+                  </td>
                   <td className="px-4 py-2.5 font-medium">
                     {alloc.documentNumber ?? "—"}
                   </td>

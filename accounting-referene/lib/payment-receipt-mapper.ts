@@ -16,7 +16,7 @@ type LineWithAccount = PaymentReceiptLine & {
 };
 
 type AllocationWithDoc = PaymentReceiptAllocation & {
-  document?: Pick<Document, "id" | "documentNumber" | "documentDate" | "totalAmount" | "currency"> | null;
+  document?: Pick<Document, "id" | "documentNumber" | "documentDate" | "totalAmount" | "currency" | "type"> | null;
   payment?: Pick<Payment, "id" | "tdsWithheld" | "transactionCharge"> | null;
 };
 
@@ -37,6 +37,7 @@ export function mapPaymentReceiptRow(
       id: a.id,
       documentId: a.documentId,
       documentNumber: a.document?.documentNumber ?? null,
+      documentType: a.document?.type ?? null,
       documentDate: a.document?.documentDate?.toISOString() ?? null,
       documentTotal: a.document?.totalAmount ?? null,
       documentCurrency: a.document?.currency ?? null,

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
-import { syncPaymentReceiptForApprovedPayment } from "@/lib/payment-receipt-sync";
-import { syncBuyerExpenditureOnVendorInvoicePaid } from "@/lib/sync-vendor-payment";
+import { syncReceiptsAfterApprovedPayment } from "@/lib/payment-receipt-route-sync";
 import { paymentApproveSchema } from "@/lib/validations/payment";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -53,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
       ? (existing.document.settings as Record<string, unknown>)
       : {};
 
-  const payment = await prisma.$transaction(async (tx) => {
+  const { payment, payoutReceiptId } = await prisma.$transaction(async (tx) => {
     const p = await tx.payment.update({
       where: { id },
       data: {
@@ -69,6 +68,8 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
       },
     });
 
+    let payoutReceiptId: string | null = null;
+
     if (status === "APPROVED") {
       await tx.document.update({
         where: { id: existing.documentId },
@@ -81,21 +82,18 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         },
       });
 
-      await syncBuyerExpenditureOnVendorInvoicePaid(
-        tx,
-        existing.documentId,
-        existing.paymentDate.toISOString(),
-      );
-
-      await syncPaymentReceiptForApprovedPayment(tx, {
+      const syncResult = await syncReceiptsAfterApprovedPayment(tx, {
         payment: p,
         document: existing.document,
+        businessId: ctx.businessId,
         userId: ctx.userId,
+        paymentDate: existing.paymentDate.toISOString(),
       });
+      payoutReceiptId = syncResult.payoutReceiptId;
     }
 
-    return p;
+    return { payment: p, payoutReceiptId };
   });
 
-  return NextResponse.json({ payment });
+  return NextResponse.json({ payment, payoutReceiptId });
 }

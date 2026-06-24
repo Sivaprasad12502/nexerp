@@ -18,7 +18,11 @@ export function getDocumentEditFormConfig(doc: Pick<DocumentDetail, "type">) {
 
   return {
     updateEndpoint: (docId: string) => `/api/documents/${docId}`,
-    invalidateKey: isPurchaseOrder ? "purchase-orders" : "documents",
+    invalidateKey: isPurchaseOrder
+      ? "purchase-orders"
+      : type === "PROFORMA_INVOICE"
+        ? "proforma-invoices"
+        : "documents",
     titleFallback: typeLabel,
     resourceLabel: typeLabel,
     responseKey: "document" as const,

@@ -574,6 +574,56 @@ export async function sendInvoiceEmail(args: InvoiceEmailArgs): Promise<boolean>
   }
 }
 
+/** Send proforma invoice to client. Never throws. */
+export async function sendProformaInvoiceEmail(args: InvoiceEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, cc, replyTo, subject, message, businessName, viewUrl } = args;
+
+  const bodyHtml = message
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px 0;color:#444">${line || "&nbsp;"}</p>`)
+    .join("");
+
+  const viewButtonHtml = viewUrl
+    ? `<div style="margin:24px 0">
+        <a href="${viewUrl}"
+           style="background:#7438dc;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">
+          View Proforma Invoice
+        </a>
+       </div>`
+    : "";
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      ...(cc && cc.length > 0 && { cc }),
+      ...(replyTo && { replyTo }),
+      subject,
+      text: `${message}${viewUrl ? `\n\nView Proforma Invoice: ${viewUrl}` : ""}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            ${bodyHtml}
+            ${viewButtonHtml}
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send proforma invoice email", err);
+    }
+    return false;
+  }
+}
+
 type PaymentReceiptEmailArgs = {
   to: string;
   cc?: string[];
@@ -629,6 +679,66 @@ export async function sendPaymentReceiptEmail(args: PaymentReceiptEmailArgs): Pr
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.error("[mailer] failed to send payment receipt email", err);
+    }
+    return false;
+  }
+}
+
+type PayoutReceiptEmailArgs = {
+  to: string;
+  cc?: string[];
+  replyTo?: string;
+  subject: string;
+  message: string;
+  businessName: string;
+  viewUrl?: string;
+};
+
+/** Send payout receipt to vendor. Never throws. */
+export async function sendPayoutReceiptEmail(args: PayoutReceiptEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, cc, replyTo, subject, message, businessName, viewUrl } = args;
+
+  const bodyHtml = message
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px 0;color:#444">${line || "&nbsp;"}</p>`)
+    .join("");
+
+  const viewButtonHtml = viewUrl
+    ? `<div style="margin:24px 0">
+        <a href="${viewUrl}"
+           style="background:#7438dc;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">
+          View Payout Receipt
+        </a>
+       </div>`
+    : "";
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      ...(cc && cc.length > 0 && { cc }),
+      ...(replyTo && { replyTo }),
+      subject,
+      text: `${message}${viewUrl ? `\n\nView Payout Receipt: ${viewUrl}` : ""}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            ${bodyHtml}
+            ${viewButtonHtml}
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send payout receipt email", err);
     }
     return false;
   }

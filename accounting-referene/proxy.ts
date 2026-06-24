@@ -28,14 +28,17 @@ export async function proxy(req: NextRequest) {
   const isReceivedPaymentReceipt = pathname.startsWith(
     "/sales-and-invoices/payement-receipts/received/",
   );
+  const isReceivedPayoutReceipt = pathname.startsWith(
+    "/purchases/payout-reciept/received/",
+  );
   const isProtected =
     pathname.startsWith("/dashboard") || pathname.startsWith("/contact");
   const isBusinessNew = pathname === "/business-new";
   const isAuthPage =
     pathname.startsWith("/login") || pathname.startsWith("/register");
 
-  // Unauthenticated client opening a shared payment receipt link
-  if (isReceivedPaymentReceipt && !token) {
+  // Unauthenticated client/vendor opening a shared receipt link
+  if ((isReceivedPaymentReceipt || isReceivedPayoutReceipt) && !token) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);

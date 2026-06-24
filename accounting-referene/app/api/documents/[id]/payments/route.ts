@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
-import { syncPaymentReceiptForApprovedPayment } from "@/lib/payment-receipt-sync";
-import { syncBuyerExpenditureOnVendorInvoicePaid } from "@/lib/sync-vendor-payment";
+import { syncReceiptsAfterApprovedPayment } from "@/lib/payment-receipt-route-sync";
 import { paymentCreateSchema } from "@/lib/validations/payment";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -40,6 +39,17 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
 
   const document = await prisma.document.findFirst({
     where: { id, businessId: ctx.businessId, type: "INVOICE" },
+    select: {
+      id: true,
+      type: true,
+      clientId: true,
+      clientName: true,
+      currency: true,
+      documentNumber: true,
+      totalAmount: true,
+      purchasedAt: true,
+      settings: true,
+    },
   });
 
   if (!document) {
@@ -70,7 +80,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       ? (document.settings as Record<string, unknown>)
       : {};
 
-  const payment = await prisma.$transaction(async (tx) => {
+  const { payment, payoutReceiptId } = await prisma.$transaction(async (tx) => {
     const p = await tx.payment.create({
       data: {
         businessId: ctx.businessId,
@@ -91,7 +101,6 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       },
     });
 
-    // Mark invoice as paid
     await tx.document.update({
       where: { id },
       data: {
@@ -103,16 +112,16 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       },
     });
 
-    await syncBuyerExpenditureOnVendorInvoicePaid(tx, id, data.paymentDate);
-
-    await syncPaymentReceiptForApprovedPayment(tx, {
+    const { payoutReceiptId } = await syncReceiptsAfterApprovedPayment(tx, {
       payment: p,
       document,
+      businessId: ctx.businessId,
       userId: ctx.userId,
+      paymentDate: data.paymentDate,
     });
 
-    return p;
+    return { payment: p, payoutReceiptId };
   });
 
-  return NextResponse.json({ payment }, { status: 201 });
+  return NextResponse.json({ payment, payoutReceiptId }, { status: 201 });
 }

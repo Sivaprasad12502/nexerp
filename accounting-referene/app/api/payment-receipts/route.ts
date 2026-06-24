@@ -9,11 +9,13 @@ import {
   settleInvoicesForReceipt,
   sumLines,
 } from "@/lib/payment-receipt-settle";
+import { settleProformaInvoicesForReceipt } from "@/lib/proforma-payment-receipt-settle";
 import {
   generateReceiptNumber,
 } from "@/lib/payment-receipt-utils";
 import { paymentReceiptIncludeRelations as includeRelations } from "@/lib/payment-receipt-includes";
 import { paymentReceiptCreateSchema } from "@/lib/validations/payment-receipt";
+import { backfillAllPaymentReceipts } from "@/lib/payment-receipt-sync";
 
 async function validateAccounts(businessId: string, accountIds: (string | null | undefined)[]) {
   const ids = [...new Set(accountIds.filter(Boolean))] as string[];
@@ -30,6 +32,8 @@ export async function GET(req: NextRequest) {
   if (!ctxCan(ctx, "payment-receipts", "view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await backfillAllPaymentReceipts();
 
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") ?? "";
@@ -178,14 +182,19 @@ export async function POST(req: NextRequest) {
       });
 
       if (!data.saveAsDraft && data.allocations.length > 0) {
-        await settleInvoicesForReceipt(tx, {
+        const settleParams = {
           businessId: ctx.businessId,
           userId: ctx.userId,
           receiptId: created.id,
           receiptDate: data.receiptDate,
           allocations: data.allocations,
           paymentAccountId: primaryAccountId,
-        });
+        };
+        if (data.settlementDocumentType === "PROFORMA_INVOICE") {
+          await settleProformaInvoicesForReceipt(tx, settleParams);
+        } else {
+          await settleInvoicesForReceipt(tx, settleParams);
+        }
         await tx.paymentReceipt.update({
           where: { id: created.id },
           data: { status: "SETTLED" },
@@ -207,8 +216,17 @@ export async function POST(req: NextRequest) {
       if (err.message.startsWith("INVALID_INVOICE")) {
         return NextResponse.json({ error: "One or more invoices are invalid" }, { status: 400 });
       }
-      if (err.message.startsWith("INVOICE_ALREADY_PAID")) {
-        return NextResponse.json({ error: "One or more invoices are already paid" }, { status: 409 });
+      if (err.message.startsWith("PROFORMA_ALREADY_PAID")) {
+        return NextResponse.json(
+          { error: "One or more proforma invoices are already paid" },
+          { status: 409 },
+        );
+      }
+      if (err.message.startsWith("INVALID_PROFORMA")) {
+        return NextResponse.json(
+          { error: "One or more proforma invoices are invalid" },
+          { status: 400 },
+        );
       }
     }
     if (process.env.NODE_ENV === "development") {

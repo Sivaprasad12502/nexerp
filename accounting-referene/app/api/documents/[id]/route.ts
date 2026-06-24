@@ -10,6 +10,9 @@ import {
   quotationFormToDocumentUpdate,
 } from "@/lib/document-adapter";
 import { syncBuyerExpenditureOnVendorInvoicePaid } from "@/lib/sync-vendor-payment";
+import { syncPayoutReceiptForPaidExpenditure } from "@/lib/payout-receipt-sync";
+import { syncPaymentReceiptForPaidInvoice } from "@/lib/payment-receipt-sync";
+import { syncProformaPaymentReceiptForPaidProforma } from "@/lib/proforma-payment-receipt-sync";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -108,6 +111,22 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
     data.settings !== undefined &&
     existingSettings.paymentStatus !== "PAID" &&
     mergedSettings.paymentStatus === "PAID";
+  const shouldSyncPayoutForExpenditure =
+    Boolean(existing.purchasedAt) &&
+    data.settings !== undefined &&
+    existingSettings.paymentStatus !== "PAID" &&
+    mergedSettings.paymentStatus === "PAID";
+  const shouldSyncPaymentReceiptForSalesInvoice =
+    existing.type === "INVOICE" &&
+    !existing.purchasedAt &&
+    data.settings !== undefined &&
+    existingSettings.paymentStatus !== "PAID" &&
+    mergedSettings.paymentStatus === "PAID";
+  const shouldSyncPaymentReceiptForProforma =
+    existing.type === "PROFORMA_INVOICE" &&
+    data.settings !== undefined &&
+    existingSettings.paymentStatus !== "PAID" &&
+    mergedSettings.paymentStatus === "PAID";
   const syncPaymentDate =
     typeof mergedSettings.paymentDate === "string" && mergedSettings.paymentDate
       ? mergedSettings.paymentDate
@@ -197,8 +216,49 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
       },
     });
 
+      if (shouldSyncPayoutForExpenditure) {
+        await syncPayoutReceiptForPaidExpenditure(tx, {
+          expenditureId: id,
+          businessId: ctx.businessId,
+          userId: ctx.userId,
+          paymentDate: syncPaymentDate,
+        });
+      }
+
       if (shouldSyncBuyerExpenditure) {
-        await syncBuyerExpenditureOnVendorInvoicePaid(tx, id, syncPaymentDate);
+        const buyerSync = await syncBuyerExpenditureOnVendorInvoicePaid(tx, id, syncPaymentDate);
+        if (buyerSync.expenditureId) {
+          const linkedExpenditure = await tx.document.findUnique({
+            where: { id: buyerSync.expenditureId },
+            select: { businessId: true },
+          });
+          if (linkedExpenditure) {
+            await syncPayoutReceiptForPaidExpenditure(tx, {
+              expenditureId: buyerSync.expenditureId,
+              businessId: linkedExpenditure.businessId,
+              userId: ctx.userId,
+              paymentDate: syncPaymentDate,
+            });
+          }
+        }
+      }
+
+      if (shouldSyncPaymentReceiptForSalesInvoice) {
+        await syncPaymentReceiptForPaidInvoice(tx, {
+          invoiceId: id,
+          businessId: ctx.businessId,
+          userId: ctx.userId,
+          paymentDate: syncPaymentDate,
+        });
+      }
+
+      if (shouldSyncPaymentReceiptForProforma) {
+        await syncProformaPaymentReceiptForPaidProforma(tx, {
+          proformaId: id,
+          businessId: ctx.businessId,
+          userId: ctx.userId,
+          paymentDate: syncPaymentDate,
+        });
       }
 
       return updated;

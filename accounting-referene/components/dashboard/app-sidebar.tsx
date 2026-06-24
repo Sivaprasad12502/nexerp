@@ -72,6 +72,7 @@ const items: NavItem[] = [
       { label: "Vendors & Suppliers", href: "/purchases/vendors" },
       { label: "Purchases & Expenses", href: "/purchases/expenditure" },
       { label: "Purchase Orders", href: "/purchases/purchase-order" },
+      { label: "Payout Receipts", href: "/purchases/payout-reciept" },
     ],
   },
   {

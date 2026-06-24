@@ -1115,6 +1115,8 @@ export type ConvertInvoiceToBuyerExpenditureArgs = {
   invoiceDocumentId: string;
   buyerBusinessId: string;
   buyerUserId: string;
+  /** Defaults to INVOICE; use PROFORMA_INVOICE for proforma mirror flow. */
+  sourceDocumentType?: DocumentTypeValue;
 };
 
 /**
@@ -1132,11 +1134,12 @@ export async function convertInvoiceToBuyerExpenditure(
   args: ConvertInvoiceToBuyerExpenditureArgs,
 ) {
   const { invoiceDocumentId, buyerBusinessId, buyerUserId } = args;
+  const sourceDocumentType = args.sourceDocumentType ?? "INVOICE";
 
   return prisma.$transaction(async (tx) => {
-    // ── 1. Load the source invoice ──────────────────────────────────────────
+    // ── 1. Load the source invoice / proforma invoice ───────────────────────
     const invoice = await tx.document.findUnique({
-      where: { id: invoiceDocumentId, type: "INVOICE" as DocumentType },
+      where: { id: invoiceDocumentId, type: sourceDocumentType as DocumentType },
       include: {
         items: { orderBy: { sortOrder: "asc" } },
         business: {
@@ -1198,7 +1201,7 @@ export async function convertInvoiceToBuyerExpenditure(
     const existingConversion = await tx.documentConversion.findFirst({
       where: {
         sourceType: "INVOICE",
-        targetType: "INVOICE",
+        targetType: sourceDocumentType,
         targetId: invoiceDocumentId,
         businessId: buyerBusinessId,
       },
@@ -1331,17 +1334,20 @@ export async function convertInvoiceToBuyerExpenditure(
         businessId: buyerBusinessId,
         sourceType: "INVOICE",
         sourceId: expenditure.id,
-        targetType: "INVOICE",
+        targetType: sourceDocumentType,
         targetId: invoiceDocumentId,
         createdByUserId: buyerUserId,
       },
     });
 
+    const docLabel =
+      sourceDocumentType === "PROFORMA_INVOICE" ? "proforma invoice" : "invoice";
+
     // ── 11. Notify the seller ───────────────────────────────────────────────
     await notifyBusinessOwner(tx, invoice.businessId, {
       type: NotificationType.INVOICE_RECEIVED,
-      title: "Invoice added as expenditure",
-      message: `${buyerFromName} added invoice ${invoice.documentNumber} to their expenditures.`,
+      title: `${sourceDocumentType === "PROFORMA_INVOICE" ? "Proforma invoice" : "Invoice"} added as expenditure`,
+      message: `${buyerFromName} added ${docLabel} ${invoice.documentNumber} to their expenditures.`,
       entityType: "DOCUMENT",
       entityId: invoiceDocumentId,
     });
@@ -1711,6 +1717,155 @@ export async function convertSalesOrderToInvoice(
         businessId,
         sourceType: "SALES_ORDER",
         sourceId: salesOrderId,
+        targetType: INVOICE_TARGET,
+        targetId: document.id,
+        createdByUserId: userId,
+      },
+    });
+
+    return { document, created: true };
+  });
+}
+
+// ─── Proforma Invoice → Invoice ───────────────────────────────────────────────
+
+const PROFORMA_SOURCE: DocumentTypeValue = "PROFORMA_INVOICE";
+
+export type ConvertProformaToInvoiceArgs = {
+  proformaId: string;
+  businessId: string;
+  userId: string;
+};
+
+/** Converts a proforma invoice into a tax invoice in the same business. */
+export async function convertProformaToInvoice(args: ConvertProformaToInvoiceArgs) {
+  const { proformaId, businessId, userId } = args;
+
+  return prisma.$transaction(async (tx) => {
+    const proforma = await tx.document.findFirst({
+      where: { id: proformaId, businessId, type: PROFORMA_SOURCE },
+      include: { items: { orderBy: { sortOrder: "asc" } } },
+    });
+
+    if (!proforma) {
+      throw new ConversionError("NOT_FOUND", "Proforma invoice not found.");
+    }
+
+    const existingConversion = await tx.documentConversion.findUnique({
+      where: {
+        sourceType_sourceId_targetType: {
+          sourceType: PROFORMA_SOURCE,
+          sourceId: proformaId,
+          targetType: INVOICE_TARGET,
+        },
+      },
+    });
+
+    if (existingConversion) {
+      const existingDoc = await tx.document.findUnique({
+        where: { id: existingConversion.targetId },
+        include: {
+          items: { orderBy: { sortOrder: "asc" } },
+          client: { select: { id: true, businessName: true } },
+        },
+      });
+      if (existingDoc) return { document: existingDoc, created: false };
+    }
+
+    const prefix = DOCUMENT_TYPE_PREFIX[INVOICE_TARGET];
+    const count = await tx.document.count({
+      where: { businessId, type: INVOICE_TARGET as DocumentType },
+    });
+    const documentNumber = `${prefix}-${String(count + 1).padStart(4, "0")}`;
+
+    const additionalChargesTotal = (
+      Array.isArray(proforma.additionalCharges)
+        ? (proforma.additionalCharges as { amount?: number }[])
+        : []
+    ).reduce((s, c) => s + (c.amount ?? 0), 0);
+
+    const totals = calcTotals({
+      items: proforma.items,
+      discountAmount: proforma.discountAmount,
+      additionalCharges: additionalChargesTotal,
+    });
+
+    const now = new Date();
+
+    const document = await tx.document.create({
+      data: {
+        businessId,
+        type: INVOICE_TARGET as DocumentType,
+        documentNumber,
+        documentDate: now,
+        validTillDate: proforma.validTillDate,
+        title: proforma.title ?? "Invoice",
+        subtitle: proforma.subtitle,
+        logo: proforma.logo,
+        currency: proforma.currency,
+        fromName: proforma.fromName,
+        fromAddress: proforma.fromAddress,
+        fromGstin: proforma.fromGstin,
+        fromPan: proforma.fromPan,
+        clientId: proforma.clientId,
+        clientName: proforma.clientName,
+        clientAddress: proforma.clientAddress,
+        clientGstin: proforma.clientGstin,
+        shipFromWarehouseId: proforma.shipFromWarehouseId,
+        shippingName: proforma.shippingName,
+        shippingAddress: proforma.shippingAddress,
+        shippingPostalCode: proforma.shippingPostalCode,
+        shippingState: proforma.shippingState,
+        transporterName: proforma.transporterName,
+        distance: proforma.distance,
+        vehicleType: proforma.vehicleType,
+        vehicleNumber: proforma.vehicleNumber,
+        transportDocNumber: proforma.transportDocNumber,
+        transactionType: proforma.transactionType,
+        discountLabel: proforma.discountLabel,
+        discountAmount: proforma.discountAmount,
+        additionalCharges: proforma.additionalCharges as object,
+        subTotal: totals.subTotal,
+        totalTax: totals.totalTax,
+        totalDiscount: totals.totalDiscount,
+        totalQuantity: totals.totalQuantity,
+        totalAmount: totals.totalAmount,
+        amountInWords: numberToWords(totals.totalAmount, proforma.currency),
+        termsAndConditions: proforma.termsAndConditions,
+        notes: proforma.notes,
+        signature: proforma.signature,
+        additionalInfo: proforma.additionalInfo,
+        contactDetails: proforma.contactDetails,
+        attachments: proforma.attachments,
+        customFields: proforma.customFields as object,
+        settings: {
+          ...(typeof proforma.settings === "object" && proforma.settings !== null
+            ? (proforma.settings as object)
+            : {}),
+          paymentStatus: "UNPAID",
+          reverseCharge: "No",
+          eInvoiceStatus: "Not Generated",
+        },
+        status: "ISSUED",
+        createdByUserId: userId,
+        items: {
+          create: proforma.items.map(({ id: _id, documentId: _did, ...item }) => ({
+            ...item,
+            productId: item.productId ?? null,
+          })),
+        },
+      },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        client: { select: { id: true, businessName: true } },
+      },
+    });
+
+    await tx.documentConversion.create({
+      data: {
+        businessId,
+        sourceType: PROFORMA_SOURCE,
+        sourceId: proformaId,
         targetType: INVOICE_TARGET,
         targetId: document.id,
         createdByUserId: userId,

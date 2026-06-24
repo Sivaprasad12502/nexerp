@@ -8,6 +8,7 @@ export const paymentReceiptAllocationInclude = {
         documentDate: true,
         totalAmount: true,
         currency: true,
+        type: true,
       },
     },
     payment: {

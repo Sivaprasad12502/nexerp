@@ -75,6 +75,7 @@ model Business {
   paymentAccounts  PaymentAccount[]
   vendorLeads      VendorLead[]
   paymentReceipts  PaymentReceipt[]
+  payoutReceipts   PayoutReceipt[]
 }
 
 // ─── Business Settings (branding + finance defaults) ──────────────────────────
@@ -689,6 +690,7 @@ model Vendor {
 
   linkedContacts VendorContact[]
   convertedFromLeads VendorLead[]
+  payoutReceipts     PayoutReceipt[]
 
   // NULL values are distinct in PG, so manual vendors (linkedBusinessId = NULL) don't collide with each other
   @@unique([businessId, linkedBusinessId])
@@ -897,6 +899,7 @@ model Document {
   items    DocumentItem[]
   payments Payment[]
   paymentReceiptAllocations PaymentReceiptAllocation[]
+  payoutReceiptAllocations  PayoutReceiptAllocation[]
 
   @@index([businessId, type, status])
   @@index([businessId, createdAt])
@@ -1008,6 +1011,7 @@ model Payment {
   paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
 
   paymentReceiptAllocation PaymentReceiptAllocation?
+  payoutReceiptAllocation  PayoutReceiptAllocation?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1051,6 +1055,7 @@ model PaymentAccount {
   payments     Payment[]
   vendorLeads  VendorLead[]
   paymentReceiptLines PaymentReceiptLine[]
+  payoutReceiptLines  PayoutReceiptLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1137,4 +1142,85 @@ model PaymentReceiptAllocation {
   amountAllocated Float
   paymentId       String?        @unique
   payment         Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+}
+
+// ─── Payout Receipts (purchases / vendor side) ───────────────────────────────
+
+enum PayoutReceiptType {
+  PAYOUT_RECEIPT
+  VENDOR_ADVANCE
+}
+
+enum PayoutReceiptStatus {
+  DRAFT
+  ACTIVE
+  SETTLED
+  ADVANCE
+  ARCHIVED
+}
+
+model PayoutReceipt {
+  id                   String              @id @default(cuid())
+  businessId           String
+  business             Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  receiptNumber        String
+  type                 PayoutReceiptType   @default(PAYOUT_RECEIPT)
+  status               PayoutReceiptStatus @default(ACTIVE)
+
+  vendorId             String?
+  vendor               Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  receiptDate          DateTime            @default(now())
+  currency             String              @default("INR")
+
+  numberFormat         String              @default("en-IN")
+  decimalDigits        Int                 @default(2)
+  customCurrencySymbol String?
+
+  totalAmount          Float               @default(0)
+  emailSentAt          DateTime?
+  approvalToken        String?             @unique
+
+  notes                String?
+  signature            String?
+  additionalInfo       String?
+  contactDetails       String?
+  attachments          String[]            @default([])
+
+  settings             Json                @default("{}")
+
+  lines                PayoutReceiptLine[]
+  allocations          PayoutReceiptAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, receiptNumber])
+  @@index([businessId, status])
+  @@index([businessId, receiptDate])
+}
+
+model PayoutReceiptLine {
+  id                   String          @id @default(cuid())
+  receiptId            String
+  receipt              PayoutReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  paymentAccountId     String?
+  paymentAccount       PaymentAccount? @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  method               PaymentMethod   @default(ACCOUNT_TRANSFER)
+  refId                String?
+  amountReceived       Float
+  amountInBaseCurrency Float?
+  transactionCharge    Float           @default(0)
+  tags                 String[]
+  sortOrder            Int             @default(0)
+}
+
+model PayoutReceiptAllocation {
+  id              String        @id @default(cuid())
+  receiptId       String
+  receipt         PayoutReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  documentId      String
+  document        Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  amountAllocated Float
+  paymentId       String?       @unique
+  payment         Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 }

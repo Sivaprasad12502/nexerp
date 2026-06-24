@@ -11,6 +11,7 @@ const EXP_CONFIG = {
   titleFallback: "Expenditure",
   resourceLabel: "Purchase / Expense",
   responseKey: "document",
+  partyType: "vendor",
 } as const;
 
 export default function NewExpenditurePage() {

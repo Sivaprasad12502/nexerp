@@ -87,6 +87,7 @@ export function useMarkInvoicePaid() {
       toast.success("Invoice marked as paid");
       qc.invalidateQueries({ queryKey: ["invoices"] });
       qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["payment-receipts"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });

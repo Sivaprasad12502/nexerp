@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   ChevronRight,
@@ -459,9 +460,14 @@ export default function ExpenditureDetailPage({
           totalAmount: doc.totalAmount,
           currency: doc.currency,
         }}
-        onApproved={() => {
+        onApproved={(result) => {
           qc.invalidateQueries({ queryKey: ["documents", id] });
           qc.invalidateQueries({ queryKey: ["expenditures"] });
+          qc.invalidateQueries({ queryKey: ["payout-receipts"] });
+          if (result?.payoutReceiptId) {
+            toast.success("Payout receipt created — send to vendor");
+            router.push(`/purchases/payout-reciept/${result.payoutReceiptId}?email=1`);
+          }
         }}
       />
     </div>

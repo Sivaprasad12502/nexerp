@@ -43,6 +43,7 @@ export const PERMISSION_MODULES: ModuleDef[] = [
   { key: "purchase-orders", label: "Purchase Orders", group: "Purchases" },
   { key: "purchases-expenses", label: "Purchases & Expenses", group: "Purchases" },
   { key: "payment-receipts", label: "Payment Receipts", group: "Payments" },
+  { key: "payout-receipts", label: "Payout Receipts", group: "Payments" },
   { key: "payment-records", label: "Payment Records", group: "Payments" },
   { key: "payout-records", label: "Payout Records", group: "Payments" },
   { key: "reports", label: "Reports & Analytics", group: "Insights" },

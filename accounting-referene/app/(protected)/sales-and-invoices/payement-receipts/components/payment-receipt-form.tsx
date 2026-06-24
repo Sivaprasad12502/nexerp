@@ -28,6 +28,7 @@ import type { PaymentAccount } from "@/app/(protected)/sales-and-invoices/docume
 import {
   useCreatePaymentReceipt,
   useUnpaidInvoices,
+  useUnpaidProformaInvoices,
   fetchNextReceiptNumber,
   type PaymentReceiptRow,
 } from "@/lib/hooks/use-payment-receipts";
@@ -93,6 +94,9 @@ export function PaymentReceiptForm({
   const [lineModalOpen, setLineModalOpen] = useState(false);
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [extras, setExtras] = useState<PaymentReceiptExtras>(EMPTY_EXTRAS);
+  const [settlementDocumentType, setSettlementDocumentType] = useState<
+    "INVOICE" | "PROFORMA_INVOICE"
+  >("INVOICE");
 
   const { data: clientsData } = useQuery<{
     clients: { id: string; businessName: string }[];
@@ -107,9 +111,21 @@ export function PaymentReceiptForm({
     enabled: step >= 2,
   });
 
-  const { data: unpaidData, isLoading: unpaidLoading } = useUnpaidInvoices(
-    step >= 3 && !isClientAdvance ? clientId : null,
+  const { data: unpaidData, isLoading: unpaidInvoicesLoading } = useUnpaidInvoices(
+    step >= 3 && !isClientAdvance && settlementDocumentType === "INVOICE"
+      ? clientId
+      : null,
   );
+  const { data: unpaidProformaData, isLoading: unpaidProformaLoading } =
+    useUnpaidProformaInvoices(
+      step >= 3 && !isClientAdvance && settlementDocumentType === "PROFORMA_INVOICE"
+        ? clientId
+        : null,
+    );
+  const unpaidLoading =
+    settlementDocumentType === "PROFORMA_INVOICE"
+      ? unpaidProformaLoading
+      : unpaidInvoicesLoading;
 
   useEffect(() => {
     if (initialData) {
@@ -160,7 +176,10 @@ export function PaymentReceiptForm({
     () => new Map(paymentAccounts.map((a) => [a.id, a.displayName])),
     [paymentAccounts],
   );
-  const unpaidInvoices = unpaidData?.invoices ?? [];
+  const unpaidInvoices =
+    settlementDocumentType === "PROFORMA_INVOICE"
+      ? (unpaidProformaData?.proformaInvoices ?? [])
+      : (unpaidData?.invoices ?? []);
   const totalReceived = lines.reduce((s, l) => s + l.amountReceived, 0);
 
   const formatOpts = useMemo(
@@ -200,6 +219,7 @@ export function PaymentReceiptForm({
     customCurrencySymbol: format.customCurrencySymbol || null,
     lines,
     allocations: isClientAdvance ? [] : allocations,
+    settlementDocumentType,
     notes: extras.notes || null,
     signature: extras.signature || null,
     additionalInfo: extras.additionalInfo || null,
@@ -560,7 +580,7 @@ export function PaymentReceiptForm({
         <section className="rounded-lg border border-zinc-200 bg-white shadow-sm">
           <StepHeader
             n={3}
-            title={isClientAdvance ? "Add Additional Details" : "Settle Unpaid Invoices"}
+            title={isClientAdvance ? "Add Additional Details" : "Settle Unpaid Documents"}
             open={step === 3}
             onToggle={() => canContinueStep2 && setStep(3)}
             disabled={!canContinueStep2}
@@ -582,6 +602,36 @@ export function PaymentReceiptForm({
                 </div>
               ) : (
                 <>
+                  <div className="mb-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSettlementDocumentType("INVOICE");
+                        setSelectedInvoices({});
+                      }}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                        settlementDocumentType === "INVOICE"
+                          ? "bg-[#7438dc] text-white"
+                          : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                      }`}
+                    >
+                      Invoices
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSettlementDocumentType("PROFORMA_INVOICE");
+                        setSelectedInvoices({});
+                      }}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                        settlementDocumentType === "PROFORMA_INVOICE"
+                          ? "bg-[#7438dc] text-white"
+                          : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                      }`}
+                    >
+                      Proforma Invoices
+                    </button>
+                  </div>
                   {unpaidInvoices.length === 0 ? (
                     <UnpaidInvoicesEmptyState clientId={clientId} />
                   ) : (
@@ -590,7 +640,11 @@ export function PaymentReceiptForm({
                         <thead className="bg-zinc-50 text-zinc-500">
                           <tr>
                             <th className="w-10 px-3 py-2" />
-                            <th className="px-3 py-2 text-left">Invoice</th>
+                            <th className="px-3 py-2 text-left">
+                              {settlementDocumentType === "PROFORMA_INVOICE"
+                                ? "Proforma Invoice"
+                                : "Invoice"}
+                            </th>
                             <th className="px-3 py-2 text-left">Date</th>
                             <th className="px-3 py-2 text-right">Amount Due</th>
                             <th className="px-3 py-2 text-right">Allocate</th>

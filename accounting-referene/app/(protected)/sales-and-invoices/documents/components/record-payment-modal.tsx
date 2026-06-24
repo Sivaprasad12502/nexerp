@@ -38,7 +38,7 @@ type Props = {
   /** If provided, this is an existing PENDING payment to approve. */
   payment: PendingPayment | null;
   invoice: InvoiceSummary;
-  onApproved: () => void;
+  onApproved: (result?: { payoutReceiptId?: string | null }) => void;
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -171,14 +171,14 @@ export function RecordPaymentModal({
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: (data: { payoutReceiptId?: string | null }) => {
       toast.success(
         payment
           ? "Payment approved. Invoice marked as Paid!"
           : "Payment recorded successfully!",
       );
       qc.invalidateQueries({ queryKey: ["documents", documentId] });
-      onApproved();
+      onApproved(data);
       onClose();
     },
     onError: (e: Error) => toast.error(e.message),
