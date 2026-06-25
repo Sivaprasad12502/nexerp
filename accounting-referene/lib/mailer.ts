@@ -458,27 +458,38 @@ export async function sendSalesOrderEmail(args: SalesOrderEmailArgs): Promise<bo
 type PaymentApprovalEmailArgs = {
   to: string;
   businessName: string;
-  invoiceNumber: string;
+  /** @deprecated Use documentNumber — kept for backward compatibility */
+  invoiceNumber?: string;
+  documentNumber?: string;
   amount: number;
   clientName: string;
   approveUrl: string;
+  documentLabel?: string;
 };
 
-/** Notify the invoice owner that a client recorded a payment needing approval. Never throws. */
+/** Notify the document owner that a client recorded a payment needing approval. Never throws. */
 export async function sendPaymentApprovalEmail(args: PaymentApprovalEmailArgs): Promise<boolean> {
   const transport = getTransport();
   if (!transport) return false;
 
   const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
-  const { to, businessName, invoiceNumber, amount, clientName, approveUrl } = args;
+  const {
+    to,
+    businessName,
+    amount,
+    clientName,
+    approveUrl,
+    documentLabel = "Invoice",
+  } = args;
+  const documentNumber = args.documentNumber ?? args.invoiceNumber ?? "";
 
   try {
     await transport.sendMail({
       from,
       to,
-      subject: `Payment received for Invoice ${invoiceNumber} — Review & Approve`,
+      subject: `Payment received for ${documentLabel} ${documentNumber} — Review & Approve`,
       text:
-        `${clientName} has recorded a payment of ${amount} for invoice ${invoiceNumber}.\n\n` +
+        `${clientName} has recorded a payment of ${amount} for ${documentLabel.toLowerCase()} ${documentNumber}.\n\n` +
         `Review and approve the payment:\n${approveUrl}\n\n— ${businessName}`,
       html: `
         <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
@@ -488,7 +499,7 @@ export async function sendPaymentApprovalEmail(args: PaymentApprovalEmailArgs): 
           <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
             <p style="margin:0 0 8px 0;color:#444">
               <strong>${clientName}</strong> has recorded a payment of
-              <strong>${amount}</strong> for invoice <strong>${invoiceNumber}</strong>.
+              <strong>${amount}</strong> for ${documentLabel.toLowerCase()} <strong>${documentNumber}</strong>.
             </p>
             <p style="margin:0 0 16px 0;color:#666;font-size:13px">
               Please review the payment details and approve or reject.
@@ -569,6 +580,156 @@ export async function sendInvoiceEmail(args: InvoiceEmailArgs): Promise<boolean>
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.error("[mailer] failed to send invoice email", err);
+    }
+    return false;
+  }
+}
+
+/** Send credit note to client. Never throws. */
+export async function sendCreditNoteEmail(args: InvoiceEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, cc, replyTo, subject, message, businessName, viewUrl } = args;
+
+  const bodyHtml = message
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px 0;color:#444">${line || "&nbsp;"}</p>`)
+    .join("");
+
+  const viewButtonHtml = viewUrl
+    ? `<div style="margin:24px 0">
+        <a href="${viewUrl}"
+           style="background:#7438dc;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">
+          View Credit Note
+        </a>
+       </div>`
+    : "";
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      ...(cc && cc.length > 0 && { cc }),
+      ...(replyTo && { replyTo }),
+      subject,
+      text: `${message}${viewUrl ? `\n\nView Credit Note: ${viewUrl}` : ""}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            ${bodyHtml}
+            ${viewButtonHtml}
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send credit note email", err);
+    }
+    return false;
+  }
+}
+
+/** Send delivery challan to client. Never throws. */
+export async function sendDeliveryChallanEmail(args: InvoiceEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, cc, replyTo, subject, message, businessName, viewUrl } = args;
+
+  const bodyHtml = message
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px 0;color:#444">${line || "&nbsp;"}</p>`)
+    .join("");
+
+  const viewButtonHtml = viewUrl
+    ? `<div style="margin:24px 0">
+        <a href="${viewUrl}"
+           style="background:#7438dc;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">
+          View Delivery Challan
+        </a>
+       </div>`
+    : "";
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      ...(cc && cc.length > 0 && { cc }),
+      ...(replyTo && { replyTo }),
+      subject,
+      text: `${message}${viewUrl ? `\n\nView Delivery Challan: ${viewUrl}` : ""}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            ${bodyHtml}
+            ${viewButtonHtml}
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send delivery challan email", err);
+    }
+    return false;
+  }
+}
+
+/** Send debit note to vendor. Never throws. */
+export async function sendDebitNoteEmail(args: InvoiceEmailArgs): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const { to, cc, replyTo, subject, message, businessName, viewUrl } = args;
+
+  const bodyHtml = message
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px 0;color:#444">${line || "&nbsp;"}</p>`)
+    .join("");
+
+  const viewButtonHtml = viewUrl
+    ? `<div style="margin:24px 0">
+        <a href="${viewUrl}"
+           style="background:#7438dc;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">
+          View Debit Note
+        </a>
+       </div>`
+    : "";
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      ...(cc && cc.length > 0 && { cc }),
+      ...(replyTo && { replyTo }),
+      subject,
+      text: `${message}${viewUrl ? `\n\nView Debit Note: ${viewUrl}` : ""}\n\n— ${businessName}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#7438dc;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">${businessName}</h2>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 8px 8px">
+            ${bodyHtml}
+            ${viewButtonHtml}
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[mailer] failed to send debit note email", err);
     }
     return false;
   }

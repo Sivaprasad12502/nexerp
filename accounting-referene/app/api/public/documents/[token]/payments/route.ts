@@ -7,6 +7,8 @@ import { sendPaymentApprovalEmail, getSellerEmailContext } from "@/lib/mailer";
 
 type RouteCtx = { params: Promise<{ token: string }> };
 
+const PAYABLE_TYPES = ["INVOICE", "DEBIT_NOTE"] as const;
+
 export async function POST(req: NextRequest, { params }: RouteCtx) {
   const { token } = await params;
 
@@ -17,9 +19,12 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     },
   });
 
-  if (!document || document.type !== "INVOICE") {
+  if (
+    !document ||
+    !PAYABLE_TYPES.includes(document.type as (typeof PAYABLE_TYPES)[number])
+  ) {
     return NextResponse.json(
-      { error: "Invoice not found or link is invalid." },
+      { error: "Document not found or link is invalid." },
       { status: 404 },
     );
   }
@@ -41,6 +46,8 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
 
   const data = result.data;
   const amountToSettle = Math.max(0, document.totalAmount - data.amountReceived);
+  const isDebitNote = document.type === "DEBIT_NOTE";
+  const documentLabel = isDebitNote ? "debit note" : "invoice";
 
   const payment = await prisma.$transaction(async (tx) => {
     const p = await tx.payment.create({
@@ -64,7 +71,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     await notifyBusinessOwner(tx, document.businessId, {
       type: NotificationType.PAYMENT_RECEIVED,
       title: "Payment recorded",
-      message: `A payment of ${document.currency} ${data.amountReceived} was recorded for invoice ${document.documentNumber}. Please review and approve.`,
+      message: `A payment of ${document.currency} ${data.amountReceived} was recorded for ${documentLabel} ${document.documentNumber}. Please review and approve.`,
       entityType: "DOCUMENT",
       entityId: document.id,
     });
@@ -80,18 +87,23 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
         req.headers.get("origin") ??
         process.env.NEXTAUTH_URL?.replace(/\/$/, "") ??
         "";
-      const approveUrl = `${origin}/sales-and-invoices/documents/${document.id}?payment=${payment.id}`;
+      const approveUrl = isDebitNote
+        ? `${origin}/purchases/debit-note/${document.id}?payment=${payment.id}`
+        : `${origin}/sales-and-invoices/documents/${document.id}?payment=${payment.id}`;
       await sendPaymentApprovalEmail({
         to: seller.user.email,
         businessName: seller.brandName ?? seller.name,
-        invoiceNumber: document.documentNumber,
+        documentNumber: document.documentNumber,
         amount: data.amountReceived,
         clientName: data.recordedByName ?? document.clientName ?? "Client",
         approveUrl,
+        documentLabel: isDebitNote ? "Debit Note" : "Invoice",
       });
     }
   } catch (err) {
-    console.error("[POST public/payments] approval email failed", err);
+    if (process.env.NODE_ENV === "development") {
+      console.error("[POST public/payments] approval email failed", err);
+    }
   }
 
   return NextResponse.json({ payment }, { status: 201 });

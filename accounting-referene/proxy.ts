@@ -31,6 +31,12 @@ export async function proxy(req: NextRequest) {
   const isReceivedPayoutReceipt = pathname.startsWith(
     "/purchases/payout-reciept/received/",
   );
+  const isReceivedDebitNote = pathname.startsWith(
+    "/purchases/debit-note/received/",
+  );
+  const isReceivedDeliveryChallan = pathname.startsWith(
+    "/sales-and-invoices/delivery-challan/received/",
+  );
   const isProtected =
     pathname.startsWith("/dashboard") || pathname.startsWith("/contact");
   const isBusinessNew = pathname === "/business-new";
@@ -38,7 +44,7 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/login") || pathname.startsWith("/register");
 
   // Unauthenticated client/vendor opening a shared receipt link
-  if ((isReceivedPaymentReceipt || isReceivedPayoutReceipt) && !token) {
+  if ((isReceivedPaymentReceipt || isReceivedPayoutReceipt || isReceivedDebitNote || isReceivedDeliveryChallan) && !token) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);

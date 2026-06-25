@@ -1,0 +1,2 @@
+-- Add CREDIT_NOTE to DocumentType enum
+ALTER TYPE "DocumentType" ADD VALUE IF NOT EXISTS 'CREDIT_NOTE';

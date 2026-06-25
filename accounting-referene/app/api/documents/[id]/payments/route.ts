@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
 import { syncReceiptsAfterApprovedPayment } from "@/lib/payment-receipt-route-sync";
+import { syncBuyerExpenditureOnDebitNotePaid } from "@/lib/sync-vendor-payment";
 import { paymentCreateSchema } from "@/lib/validations/payment";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -38,7 +39,11 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   const { id } = await params;
 
   const document = await prisma.document.findFirst({
-    where: { id, businessId: ctx.businessId, type: "INVOICE" },
+    where: {
+      id,
+      businessId: ctx.businessId,
+      type: { in: ["INVOICE", "DEBIT_NOTE"] },
+    },
     select: {
       id: true,
       type: true,
@@ -53,7 +58,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   });
 
   if (!document) {
-    return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
   let body: unknown;
@@ -112,13 +117,20 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
       },
     });
 
-    const { payoutReceiptId } = await syncReceiptsAfterApprovedPayment(tx, {
-      payment: p,
-      document,
-      businessId: ctx.businessId,
-      userId: ctx.userId,
-      paymentDate: data.paymentDate,
-    });
+    if (document.type === "DEBIT_NOTE") {
+      await syncBuyerExpenditureOnDebitNotePaid(tx, id, data.paymentDate);
+    }
+
+    const { payoutReceiptId } =
+      document.type === "INVOICE"
+        ? await syncReceiptsAfterApprovedPayment(tx, {
+            payment: p,
+            document,
+            businessId: ctx.businessId,
+            userId: ctx.userId,
+            paymentDate: data.paymentDate,
+          })
+        : { payoutReceiptId: null };
 
     return { payment: p, payoutReceiptId };
   });

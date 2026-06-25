@@ -60,8 +60,8 @@ const items: NavItem[] = [
       { label: "Invoices", href: "/sales-and-invoices/invoice" },
       { label: "Payment Receipts", href: "/sales-and-invoices/payement-receipts" },
       { label: "Sales Orders", href: "/sales-and-invoices/sales-order" },
-      { label: "Delivery Challans", href: "/sales/delivery-challans" },
-      { label: "Credit Notes", href: "/sales/credit-notes" },
+      { label: "Delivery Challans", href: "/sales-and-invoices/delivery-challan" },
+      { label: "Credit Notes", href: "/sales-and-invoices/credit-notes" },
     ],
   },
   {
@@ -73,6 +73,7 @@ const items: NavItem[] = [
       { label: "Purchases & Expenses", href: "/purchases/expenditure" },
       { label: "Purchase Orders", href: "/purchases/purchase-order" },
       { label: "Payout Receipts", href: "/purchases/payout-reciept" },
+      { label: "Debit Notes", href: "/purchases/debit-note" },
     ],
   },
   {

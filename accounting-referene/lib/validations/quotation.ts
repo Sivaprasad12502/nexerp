@@ -96,6 +96,18 @@ export const quotationSettingsSchema = z.object({
   clientEmail:      z.string().optional(),
   vendorEmail:      z.string().optional(),
   lastEmailSubject: z.string().optional(),
+  // Credit note workflow (stored in Document.settings JSON)
+  creditReason:     z.string().optional(),
+  discountOffered:  z.string().optional(),
+  creditConsumed:   z.number().optional(),
+  // Debit note workflow (stored in Document.settings JSON)
+  debitReason:      z.string().optional(),
+  debitConsumed:    z.number().optional(),
+  acceptanceStatus: z.enum(["ACCEPTED", "REJECTED"]).optional(),
+  respondedAt:      z.string().optional(),
+  // Delivery challan workflow (stored in Document.settings JSON)
+  challanWorkflowStatus: z.enum(["CREATED", "SENT", "SEEN"]).optional(),
+  seenAt:           z.string().optional(),
 }).default({
   displayUnitAs: "mergeWithQuantity",
   showTaxSummary: false,
@@ -188,6 +200,25 @@ export const quotationCreateSchema = z.object({
 });
 
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
+
+/** Credit note create — requires a linked sales invoice. */
+export const creditNoteCreateSchema = quotationCreateSchema.extend({
+  linkedInvoiceId: z.string().trim().min(1, "Invoice is required"),
+});
+
+export type CreditNoteCreateInput = z.infer<typeof creditNoteCreateSchema>;
+
+/** Debit note create — requires a linked sales invoice. */
+export const debitNoteCreateSchema = quotationCreateSchema.extend({
+  linkedInvoiceId: z.string().trim().min(1, "Invoice is required"),
+});
+
+export type DebitNoteCreateInput = z.infer<typeof debitNoteCreateSchema>;
+
+/** Delivery challan create — standalone document (no linked invoice). */
+export const deliveryChallanCreateSchema = quotationCreateSchema;
+
+export type DeliveryChallanCreateInput = z.infer<typeof deliveryChallanCreateSchema>;
 
 export const quotationUpdateSchema = quotationCreateSchema.partial();
 export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;

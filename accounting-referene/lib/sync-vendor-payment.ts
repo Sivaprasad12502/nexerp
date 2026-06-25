@@ -58,3 +58,53 @@ export async function syncBuyerExpenditureOnVendorInvoicePaid(
 
   return { synced: true, expenditureId: expenditure.id };
 }
+
+/**
+ * When a debit note is marked paid, sync payment status to the linked buyer
+ * expenditure (DocumentConversion: expenditure INVOICE → DEBIT_NOTE).
+ */
+export async function syncBuyerExpenditureOnDebitNotePaid(
+  tx: Db,
+  debitNoteId: string,
+  paymentDate: string,
+): Promise<{ synced: boolean; expenditureId?: string }> {
+  const conversions = await tx.documentConversion.findMany({
+    where: {
+      sourceType: "INVOICE",
+      targetType: "DEBIT_NOTE",
+      targetId: debitNoteId,
+    },
+    select: { sourceId: true },
+  });
+
+  for (const conversion of conversions) {
+    const expenditure = await tx.document.findUnique({
+      where: { id: conversion.sourceId },
+      select: { id: true, purchasedAt: true, settings: true },
+    });
+
+    if (!expenditure?.purchasedAt) {
+      continue;
+    }
+
+    const existingSettings = parseSettings(expenditure.settings);
+    if (existingSettings.paymentStatus === "PAID") {
+      return { synced: false, expenditureId: expenditure.id };
+    }
+
+    await tx.document.update({
+      where: { id: expenditure.id },
+      data: {
+        settings: {
+          ...existingSettings,
+          paymentStatus: "PAID",
+          paymentDate,
+        },
+      },
+    });
+
+    return { synced: true, expenditureId: expenditure.id };
+  }
+
+  return { synced: false };
+}

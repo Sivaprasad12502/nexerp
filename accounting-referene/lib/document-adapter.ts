@@ -15,6 +15,8 @@ export function getDocumentEditFormConfig(doc: Pick<DocumentDetail, "type">) {
   const type = doc.type as DocumentTypeValue;
   const typeLabel = DOCUMENT_TYPE_LABEL[type] ?? doc.type;
   const isPurchaseOrder = type === "PURCHASE_ORDER";
+  const isDebitNote = type === "DEBIT_NOTE";
+  const isDeliveryChallan = type === "DELIVERY_CHALLAN";
 
   return {
     updateEndpoint: (docId: string) => `/api/documents/${docId}`,
@@ -22,11 +24,21 @@ export function getDocumentEditFormConfig(doc: Pick<DocumentDetail, "type">) {
       ? "purchase-orders"
       : type === "PROFORMA_INVOICE"
         ? "proforma-invoices"
-        : "documents",
+        : type === "CREDIT_NOTE"
+          ? "credit-notes"
+          : isDebitNote
+            ? "debit-notes"
+            : isDeliveryChallan
+              ? "delivery-challans"
+              : "documents",
     titleFallback: typeLabel,
     resourceLabel: typeLabel,
     responseKey: "document" as const,
     ...(isPurchaseOrder ? { partyType: "vendor" as const } : {}),
+    ...(isDebitNote ? { documentKind: "debit-note" as const, partyType: "client" as const } : {}),
+    ...(isDeliveryChallan
+      ? { documentKind: "delivery-challan" as const, partyType: "client" as const }
+      : {}),
   };
 }
 

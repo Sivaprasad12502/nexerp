@@ -198,6 +198,8 @@ type SaveConfig = {
   responseKey?: string;
   /** Party picker mode. "vendor" shows vendor selection for purchase orders. Default: "client" */
   partyType?: "client" | "vendor";
+  /** Credit/debit note: show link document, reason, discount fields */
+  documentKind?: "credit-note" | "debit-note" | "delivery-challan";
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -224,8 +226,13 @@ export function QuotationForm({
     resourceLabel: config?.resourceLabel ?? "Quotation",
     responseKey: config?.responseKey ?? "quotation",
     partyType: config?.partyType ?? "client",
+    documentKind: config?.documentKind,
   };
   const isVendor = cfg.partyType === "vendor";
+  const isCreditNote = cfg.documentKind === "credit-note";
+  const isDebitNote = cfg.documentKind === "debit-note";
+  const isDeliveryChallan = cfg.documentKind === "delivery-challan";
+  const isNoteDocument = isCreditNote || isDebitNote || isDeliveryChallan;
   const qc = useQueryClient();
 
   // ── State ──
@@ -291,6 +298,11 @@ export function QuotationForm({
   const [productDropdown, setProductDropdown] = useState<number | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [linkedInvoiceId, setLinkedInvoiceId] = useState("");
+  const [creditReason, setCreditReason] = useState("");
+  const [debitReason, setDebitReason] = useState("");
+  const [discountOffered, setDiscountOffered] = useState("");
+  const [invoicePrefillLoading, setInvoicePrefillLoading] = useState(false);
 
   const logoRef = useRef<HTMLInputElement>(null);
   const signatureRef = useRef<HTMLInputElement>(null);
@@ -491,10 +503,100 @@ export function QuotationForm({
     queryFn: () => fetch("/api/warehouses").then((r) => r.json()),
   });
 
+  const { data: invoicesForCreditData } = useQuery<{
+    invoices: { id: string; documentNumber: string; clientName: string }[];
+  }>({
+    queryKey: ["invoices", "for-credit-note"],
+    queryFn: () => fetch("/api/invoices").then((r) => r.json()),
+    enabled: isCreditNote && !isEdit,
+  });
+
+  const { data: invoicesForDebitData } = useQuery<{
+    invoices: { id: string; documentNumber: string; clientName: string }[];
+  }>({
+    queryKey: ["invoices", "for-debit-note"],
+    queryFn: () => fetch("/api/invoices").then((r) => r.json()),
+    enabled: isDebitNote && !isEdit,
+  });
+
   const clients = clientsData?.clients ?? [];
   const vendors = vendorsData?.vendors ?? [];
   const products = productsData?.products ?? [];
   const warehouses = warehousesData?.warehouses ?? [];
+  const invoicesForCredit = invoicesForCreditData?.invoices ?? [];
+  const invoicesForDebit = invoicesForDebitData?.invoices ?? [];
+
+  const applyLinkedDocument = async (documentId: string) => {
+    if (!documentId) return;
+    setInvoicePrefillLoading(true);
+    try {
+      const res = await fetch(`/api/documents/${documentId}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to load document");
+      const doc = json.document as {
+        clientId?: string | null;
+        clientName?: string | null;
+        clientAddress?: string | null;
+        clientGstin?: string | null;
+        currency?: string;
+        fromName?: string | null;
+        fromAddress?: string | null;
+        fromGstin?: string | null;
+        fromPan?: string | null;
+        items?: Array<{
+          productId?: string | null;
+          name: string;
+          sku?: string | null;
+          hsnSac?: string | null;
+          unit?: string | null;
+          description?: string | null;
+          quantity: number;
+          rate: number;
+          discount?: number;
+          taxRate: number;
+        }>;
+      };
+      if (doc.clientId) setValue("clientId", doc.clientId);
+      if (doc.clientName) setValue("clientName", doc.clientName);
+      if (doc.clientAddress) setValue("clientAddress", doc.clientAddress);
+      if (doc.clientGstin) setValue("clientGstin", doc.clientGstin);
+      if (doc.currency) setValue("currency", doc.currency);
+      if (doc.fromName) setValue("fromName", doc.fromName);
+      if (doc.fromAddress) setValue("fromAddress", doc.fromAddress ?? "");
+      if (doc.fromGstin) setValue("fromGstin", doc.fromGstin ?? "");
+      if (doc.fromPan) setValue("fromPan", doc.fromPan ?? "");
+      if (doc.items?.length) {
+        setValue(
+          "items",
+          doc.items.map((item, idx) => ({
+            productId: item.productId ?? undefined,
+            name: item.name,
+            sku: item.sku ?? "",
+            hsnSac: item.hsnSac ?? "",
+            unit: item.unit ?? "",
+            description: item.description ?? "",
+            quantity: item.quantity,
+            rate: item.rate,
+            discount: item.discount ?? 0,
+            taxRate: item.taxRate,
+            amount: 0,
+            taxAmount: 0,
+            total: 0,
+            sortOrder: idx,
+          })),
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to prefill from linked document");
+    } finally {
+      setInvoicePrefillLoading(false);
+    }
+  };
+
+  const applyLinkedInvoice = async (invoiceId: string) => {
+    setLinkedInvoiceId(invoiceId);
+    await applyLinkedDocument(invoiceId);
+  };
 
   // ── Mutations ──
   const save = useMutation({
@@ -506,7 +608,31 @@ export function QuotationForm({
       const requestBody =
         method === "PATCH" && url.includes("/api/documents/") && isQuotationFormPayload(payload)
           ? quotationFormToDocumentUpdate(payload)
-          : payload;
+          : isCreditNote && !isEdit
+            ? {
+                ...payload,
+                linkedInvoiceId,
+                settings: {
+                  ...(typeof payload.settings === "object" && payload.settings !== null
+                    ? payload.settings
+                    : {}),
+                  creditReason,
+                  discountOffered,
+                },
+              }
+            : isDebitNote && !isEdit
+              ? {
+                  ...payload,
+                  linkedInvoiceId,
+                  settings: {
+                    ...(typeof payload.settings === "object" && payload.settings !== null
+                      ? payload.settings
+                      : {}),
+                    debitReason,
+                    discountOffered,
+                  },
+                }
+              : payload;
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -527,7 +653,15 @@ export function QuotationForm({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const handleSave = (status: "DRAFT" | "SAVED") =>
+  const handleSave = (status: "DRAFT" | "SAVED") => {
+    if (isCreditNote && !isEdit && !linkedInvoiceId) {
+      toast.error("Please select an invoice to link");
+      return;
+    }
+    if (isDebitNote && !isEdit && !linkedInvoiceId) {
+      toast.error("Please select an invoice to link");
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handleSubmit(
       (data) => save.mutate({ ...(data as any), status }),
@@ -540,6 +674,7 @@ export function QuotationForm({
         toast.error(firstMsg ?? "Please fix form errors before saving");
       },
     )();
+  };
 
   // ── Logo upload ──
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -952,15 +1087,106 @@ export function QuotationForm({
                     className={inputCls}
                   />
                 </div>
-                {/* Valid Till */}
-                <div>
-                  <label className={labelCls}>Valid Till Date</label>
-                  <input
-                    {...register("validTillDate")}
-                    type="date"
-                    className={inputCls}
-                  />
-                </div>
+                {/* Valid Till / Credit note fields */}
+                {isCreditNote ? (
+                  <>
+                    <div>
+                      <label className={labelCls}>
+                        Link Invoice <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={linkedInvoiceId}
+                        onChange={(e) => void applyLinkedInvoice(e.target.value)}
+                        disabled={invoicePrefillLoading || isEdit}
+                        className={inputCls}
+                      >
+                        <option value="">Select Invoice</option>
+                        {invoicesForCredit.map((inv) => (
+                          <option key={inv.id} value={inv.id}>
+                            {inv.documentNumber} — {inv.clientName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <select
+                        value={discountOffered}
+                        onChange={(e) => setDiscountOffered(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="DISCOUNT_OFFERED">Discount Offrered</option>
+                        <option value="PRODUCT_RETURN">Product Return</option>
+                        <option value="PERCENTAGE">Percentage</option>
+                        <option value="FAULT_DEFECT">Fault/ Defect in Service / Product</option>
+                        <option value="ADVANCE_PAID">Advance Paid</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <label className={labelCls}>Reason</label>
+                      <textarea
+                        value={creditReason}
+                        onChange={(e) => setCreditReason(e.target.value)}
+                        rows={2}
+                        placeholder="Reason for credit note"
+                        className={inputCls}
+                      />
+                    </div>
+                  </>
+                ) : isDebitNote ? (
+                  <>
+                    <div>
+                      <label className={labelCls}>
+                        Link Invoice <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={linkedInvoiceId}
+                        onChange={(e) => void applyLinkedInvoice(e.target.value)}
+                        disabled={invoicePrefillLoading || isEdit}
+                        className={inputCls}
+                      >
+                        <option value="">Select Invoice</option>
+                        {invoicesForDebit.map((inv) => (
+                          <option key={inv.id} value={inv.id}>
+                            {inv.documentNumber} — {inv.clientName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <select
+                        value={discountOffered}
+                        onChange={(e) => setDiscountOffered(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="CORRECTION_IN_INVOINCE">Correction In Invoice</option>
+                        <option value="CHANGE_IN_POS">Change In POS</option>
+                        <option value="FINALIZATION_IN_PROVISIONAL_ASSESSMENT">Finalization in Provisional Assessment</option>
+                      
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <label className={labelCls}>Reason</label>
+                      <textarea
+                        value={debitReason}
+                        onChange={(e) => setDebitReason(e.target.value)}
+                        rows={2}
+                        placeholder="Reason for debit note"
+                        className={inputCls}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className={labelCls}>Valid Till Date</label>
+                    <input
+                      {...register("validTillDate")}
+                      type="date"
+                      className={inputCls}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Custom fields */}
@@ -1066,7 +1292,9 @@ export function QuotationForm({
             <div className="mb-4 border-b border-dotted border-zinc-300 pb-3">
               <div className="flex items-center gap-2">
                 <Building2 className="size-4 text-zinc-400" />
-                <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} From</h3>
+                <h3 className="font-medium text-zinc-950">
+                  {isNoteDocument ? "Issued By" : `${cfg.resourceLabel} From`}
+                </h3>
                 <span className="text-xs text-zinc-400">(Your Details)</span>
               </div>
             </div>
@@ -1109,7 +1337,9 @@ export function QuotationForm({
           <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-100">
             <div className="flex items-center gap-2 mb-4">
               <FileText className="size-4 text-zinc-400" />
-              <h3 className="font-medium text-zinc-950">{cfg.resourceLabel} For</h3>
+              <h3 className="font-medium text-zinc-950">
+                {isNoteDocument ? "Issued To" : `${cfg.resourceLabel} For`}
+              </h3>
               <span className="text-xs text-zinc-400">
                 {isVendor ? "(Vendor’s Details)" : "(Client’s Details)"}
               </span>

@@ -4,15 +4,18 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
 import { documentSendSchema } from "@/lib/validations/document";
-import { sendPurchaseOrderEmail, sendInvoiceEmail, sendSalesOrderEmail } from "@/lib/mailer";
+import { sendPurchaseOrderEmail, sendInvoiceEmail, sendSalesOrderEmail, sendCreditNoteEmail, sendDebitNoteEmail, sendDeliveryChallanEmail } from "@/lib/mailer";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
 // Document types that are allowed to use this send endpoint
-const SENDABLE_TYPES: ("PURCHASE_ORDER" | "SALES_ORDER" | "INVOICE")[] = [
+const SENDABLE_TYPES: ("PURCHASE_ORDER" | "SALES_ORDER" | "INVOICE" | "CREDIT_NOTE" | "DEBIT_NOTE" | "DELIVERY_CHALLAN")[] = [
   "PURCHASE_ORDER",
   "SALES_ORDER",
   "INVOICE",
+  "CREDIT_NOTE",
+  "DEBIT_NOTE",
+  "DELIVERY_CHALLAN",
 ];
 
 export async function POST(req: NextRequest, { params }: RouteCtx) {
@@ -54,13 +57,22 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   const isPurchaseOrder = document.type === "PURCHASE_ORDER";
   const isSalesOrder = document.type === "SALES_ORDER";
   const isInvoice = document.type === "INVOICE";
+  const isCreditNote = document.type === "CREDIT_NOTE";
+  const isDebitNote = document.type === "DEBIT_NOTE";
+  const isDeliveryChallan = document.type === "DELIVERY_CHALLAN";
   const viewUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}`
     : isSalesOrder
       ? `${origin}/sales-order/${approvalToken}`
       : isInvoice
         ? `${origin}/invoice/${approvalToken}`
-        : "";
+        : isCreditNote
+          ? `${origin}/sales-and-invoices/credit-notes/received/${approvalToken}`
+          : isDebitNote
+            ? `${origin}/purchases/debit-note/received/${approvalToken}`
+            : isDeliveryChallan
+              ? `${origin}/sales-and-invoices/delivery-challan/received/${approvalToken}`
+              : "";
   const acceptUrl = isPurchaseOrder
     ? `${origin}/purchase-order/${approvalToken}?action=accept`
     : "";
@@ -68,6 +80,36 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
   let emailSent = false;
   if (isInvoice) {
     emailSent = await sendInvoiceEmail({
+      to: data.to,
+      cc: data.cc,
+      replyTo: data.replyTo || undefined,
+      subject: data.subject,
+      message: data.message,
+      businessName,
+      viewUrl,
+    });
+  } else if (isCreditNote) {
+    emailSent = await sendCreditNoteEmail({
+      to: data.to,
+      cc: data.cc,
+      replyTo: data.replyTo || undefined,
+      subject: data.subject,
+      message: data.message,
+      businessName,
+      viewUrl,
+    });
+  } else if (isDebitNote) {
+    emailSent = await sendDebitNoteEmail({
+      to: data.to,
+      cc: data.cc,
+      replyTo: data.replyTo || undefined,
+      subject: data.subject,
+      message: data.message,
+      businessName,
+      viewUrl,
+    });
+  } else if (isDeliveryChallan) {
+    emailSent = await sendDeliveryChallanEmail({
       to: data.to,
       cc: data.cc,
       replyTo: data.replyTo || undefined,
@@ -101,6 +143,11 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
 
   const now = new Date();
 
+  const existingSettings =
+    typeof document.settings === "object" && document.settings !== null
+      ? (document.settings as Record<string, unknown>)
+      : {};
+
   await prisma.$transaction(async (tx) => {
     await tx.document.update({
       where: { id },
@@ -109,12 +156,11 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
         status: "ISSUED",
         approvalToken,
         settings: {
-          ...(typeof document.settings === "object" && document.settings !== null
-            ? (document.settings as object)
-            : {}),
-          ...(isInvoice || isSalesOrder
+          ...existingSettings,
+          ...(isInvoice || isSalesOrder || isCreditNote || isDebitNote || isDeliveryChallan
             ? { clientEmail: data.to }
             : { vendorEmail: data.to }),
+          ...(isDeliveryChallan ? { challanWorkflowStatus: "SENT" } : {}),
           lastEmailSubject: data.subject,
         },
       },

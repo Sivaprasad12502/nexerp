@@ -6,6 +6,8 @@ export const DOCUMENT_TYPES = [
   "SALES_ORDER",
   "PROFORMA_INVOICE",
   "DELIVERY_CHALLAN",
+  "CREDIT_NOTE",
+  "DEBIT_NOTE",
 ] as const;
 
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number];
@@ -16,6 +18,8 @@ export const DOCUMENT_TYPE_LABEL: Record<DocumentTypeValue, string> = {
   SALES_ORDER:      "Sales Order",
   PROFORMA_INVOICE: "Proforma Invoice",
   DELIVERY_CHALLAN: "Delivery Challan",
+  CREDIT_NOTE:      "Credit Note",
+  DEBIT_NOTE:       "Debit Note",
 };
 
 export const DOCUMENT_TYPE_PREFIX: Record<DocumentTypeValue, string> = {
@@ -24,6 +28,8 @@ export const DOCUMENT_TYPE_PREFIX: Record<DocumentTypeValue, string> = {
   SALES_ORDER:      "SO",
   PROFORMA_INVOICE: "PI",
   DELIVERY_CHALLAN: "DC",
+  CREDIT_NOTE:      "CN",
+  DEBIT_NOTE:       "DN",
 };
 
 export const documentConvertSchema = z.object({

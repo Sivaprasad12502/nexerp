@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
 import { syncReceiptsAfterApprovedPayment } from "@/lib/payment-receipt-route-sync";
+import { syncBuyerExpenditureOnDebitNotePaid } from "@/lib/sync-vendor-payment";
 import { paymentApproveSchema } from "@/lib/validations/payment";
 
 type RouteCtx = { params: Promise<{ id: string }> };
@@ -82,13 +83,24 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         },
       });
 
-      const syncResult = await syncReceiptsAfterApprovedPayment(tx, {
-        payment: p,
-        document: existing.document,
-        businessId: ctx.businessId,
-        userId: ctx.userId,
-        paymentDate: existing.paymentDate.toISOString(),
-      });
+      if (existing.document.type === "DEBIT_NOTE") {
+        await syncBuyerExpenditureOnDebitNotePaid(
+          tx,
+          existing.documentId,
+          existing.paymentDate.toISOString(),
+        );
+      }
+
+      const syncResult =
+        existing.document.type === "INVOICE"
+          ? await syncReceiptsAfterApprovedPayment(tx, {
+              payment: p,
+              document: existing.document,
+              businessId: ctx.businessId,
+              userId: ctx.userId,
+              paymentDate: existing.paymentDate.toISOString(),
+            })
+          : { payoutReceiptId: null };
       payoutReceiptId = syncResult.payoutReceiptId;
     }
 

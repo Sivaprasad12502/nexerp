@@ -227,6 +227,15 @@ export function EmailDocumentSheet({
       );
       qc.invalidateQueries({ queryKey: ["documents"] });
       qc.invalidateQueries({ queryKey: ["documents", documentId] });
+      if (documentLabel === "Credit Note") {
+        qc.invalidateQueries({ queryKey: ["credit-notes"] });
+      }
+      if (documentLabel === "Debit Note") {
+        qc.invalidateQueries({ queryKey: ["debit-notes"] });
+      }
+      if (documentLabel === "Delivery Challan") {
+        qc.invalidateQueries({ queryKey: ["delivery-challans"] });
+      }
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),

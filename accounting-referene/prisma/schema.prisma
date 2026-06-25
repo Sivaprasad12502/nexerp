@@ -816,6 +816,8 @@ enum DocumentType {
   SALES_ORDER
   PROFORMA_INVOICE
   DELIVERY_CHALLAN
+  CREDIT_NOTE
+  DEBIT_NOTE
 }
 
 enum DocumentStatus {

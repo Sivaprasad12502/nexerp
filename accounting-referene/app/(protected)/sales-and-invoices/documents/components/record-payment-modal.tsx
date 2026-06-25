@@ -178,6 +178,8 @@ export function RecordPaymentModal({
           : "Payment recorded successfully!",
       );
       qc.invalidateQueries({ queryKey: ["documents", documentId] });
+      qc.invalidateQueries({ queryKey: ["document-payments", documentId] });
+      qc.invalidateQueries({ queryKey: ["debit-notes"] });
       onApproved(data);
       onClose();
     },
