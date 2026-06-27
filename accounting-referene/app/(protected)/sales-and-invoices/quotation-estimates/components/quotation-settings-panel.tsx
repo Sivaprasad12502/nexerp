@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import {
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
   Loader2,
   Upload,
   X,
@@ -11,6 +14,8 @@ import {
 import { uploadFile } from "@/lib/upload";
 import { formatReceiptAmount } from "@/lib/payment-receipt-format";
 import { toast } from "sonner";
+import { DOCUMENT_TEMPLATES, type DocumentTemplateId } from "@/lib/document-templates";
+import { TemplatePreviewThumbnail } from "@/components/document-templates/template-preview-thumbnail";
 import type { QuotationSettings } from "@/lib/validations/quotation";
 import type { BusinessSettingsRow } from "./quotation-preview";
 
@@ -91,158 +96,88 @@ function Toggle({
   );
 }
 
-// ─── Template thumbnails ──────────────────────────────────────────────────────
-
-const TEMPLATES = [
-  { id: "professional", label: "Professional" },
-  { id: "modern",       label: "Modern"       },
-  { id: "simple",       label: "Simple"       },
-  { id: "classic",      label: "Classic"      },
-] as const;
-
 function TemplatePicker({
   value,
   onChange,
+  settings,
+  documentLabel,
 }: {
   value: string;
   onChange: (t: string) => void;
+  settings: QuotationSettings;
+  documentLabel: string;
 }) {
-  const [idx, setIdx] = useState(() => TEMPLATES.findIndex((t) => t.id === value) ?? 0);
+  const [idx, setIdx] = useState(() => DOCUMENT_TEMPLATES.findIndex((t) => t.id === value) ?? 0);
 
   useEffect(() => {
-    const i = TEMPLATES.findIndex((t) => t.id === value);
+    const i = DOCUMENT_TEMPLATES.findIndex((t) => t.id === value);
     if (i >= 0) setIdx(i);
   }, [value]);
 
   const go = (dir: -1 | 1) => {
-    const next = (idx + dir + TEMPLATES.length) % TEMPLATES.length;
+    const next = (idx + dir + DOCUMENT_TEMPLATES.length) % DOCUMENT_TEMPLATES.length;
     setIdx(next);
-    onChange(TEMPLATES[next].id);
+    onChange(DOCUMENT_TEMPLATES[next].id);
   };
 
-  const current = TEMPLATES[idx];
+  const select = (i: number) => {
+    setIdx(i);
+    onChange(DOCUMENT_TEMPLATES[i].id);
+  };
+
+  const current = DOCUMENT_TEMPLATES[idx];
 
   return (
-    <div className="space-y-2">
-      {/* Big card preview */}
-      <div className="rounded-lg border-2 border-[#7438dc] p-3 bg-white relative">
-        <div className="flex items-center justify-between mb-2">
+    <div className="space-y-3">
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3">
+        {/* Header: template name + selected badge */}
+        <div className="mb-3 flex items-center justify-between px-1">
+          <span className="text-sm font-semibold text-zinc-800">{current.label}</span>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#7438dc]">
+            <CircleCheck className="size-4" />
+            Selected
+          </span>
+        </div>
+
+        {/* Preview with overlay navigation */}
+        <div className="relative flex min-h-[280px] items-center justify-center px-8">
           <button
             type="button"
             onClick={() => go(-1)}
-            className="size-6 flex items-center justify-center rounded-full bg-[#7438dc]/10 text-[#7438dc] hover:bg-[#7438dc]/20 text-sm font-bold"
+            aria-label="Previous template"
+            className="absolute left-0 z-10 flex size-8 items-center justify-center rounded-full bg-zinc-800 text-white shadow-md transition-colors hover:bg-zinc-700"
           >
-            ‹
+            <ChevronLeft className="size-4" />
           </button>
-          <span className="text-xs font-semibold text-zinc-700">{current.label}</span>
+
+          <TemplatePreviewThumbnail
+            templateId={current.id as DocumentTemplateId}
+            settings={settings}
+            documentLabel={documentLabel}
+          />
+
           <button
             type="button"
             onClick={() => go(1)}
-            className="size-6 flex items-center justify-center rounded-full bg-[#7438dc]/10 text-[#7438dc] hover:bg-[#7438dc]/20 text-sm font-bold"
+            aria-label="Next template"
+            className="absolute right-0 z-10 flex size-8 items-center justify-center rounded-full bg-zinc-800 text-white shadow-md transition-colors hover:bg-zinc-700"
           >
-            ›
+            <ChevronRight className="size-4" />
           </button>
-        </div>
-        {/* Mini mockup */}
-        <TemplateMockup template={current.id} />
-        <div className="absolute top-2 right-2">
-          <span className="text-[10px] bg-[#7438dc] text-white px-1.5 py-0.5 rounded">Selected</span>
         </div>
       </div>
 
-      {/* Dots */}
+      {/* Pagination dots */}
       <div className="flex justify-center gap-1.5">
-        {TEMPLATES.map((t, i) => (
+        {DOCUMENT_TEMPLATES.map((t, i) => (
           <button
             key={t.id}
             type="button"
-            onClick={() => { setIdx(i); onChange(t.id); }}
-            className={`size-2 rounded-full transition-colors ${i === idx ? "bg-[#7438dc]" : "bg-zinc-200"}`}
+            aria-label={`Select ${t.label} template`}
+            onClick={() => select(i)}
+            className={`size-2 rounded-full transition-colors ${i === idx ? "bg-[#7438dc]" : "bg-zinc-200 hover:bg-zinc-300"}`}
           />
         ))}
-      </div>
-    </div>
-  );
-}
-
-function TemplateMockup({ template }: { template: string }) {
-  if (template === "professional") {
-    return (
-      <div className="h-24 bg-zinc-50 rounded overflow-hidden text-[4px]">
-        <div className="bg-[#7438dc] h-7 px-2 py-1 flex items-center justify-between">
-          <div>
-            <div className="bg-white/90 h-1.5 w-12 rounded mb-0.5" />
-            <div className="bg-white/60 h-1 w-8 rounded" />
-          </div>
-          <div className="bg-white/20 h-5 w-6 rounded" />
-        </div>
-        <div className="px-2 pt-1.5 space-y-1">
-          <div className="flex gap-1">
-            <div className="flex-1 border border-zinc-200 rounded h-4" />
-            <div className="flex-1 border border-zinc-200 rounded h-4" />
-          </div>
-          <div className="bg-zinc-200 h-1.5 rounded w-full" />
-          <div className="bg-zinc-100 h-1 rounded w-3/4" />
-          <div className="bg-zinc-100 h-1 rounded w-1/2" />
-        </div>
-      </div>
-    );
-  }
-  if (template === "modern") {
-    return (
-      <div className="h-24 bg-white rounded overflow-hidden text-[4px] border border-zinc-100">
-        <div className="border-b-2 border-[#7438dc] px-2 py-1 flex items-center justify-between">
-          <div className="bg-zinc-200 h-4 w-6 rounded" />
-          <div className="space-y-0.5 text-right">
-            <div className="bg-zinc-300 h-1 w-8 rounded" />
-            <div className="bg-zinc-200 h-1 w-6 rounded" />
-          </div>
-        </div>
-        <div className="px-2 pt-1.5 space-y-1">
-          <div className="flex gap-1">
-            <div className="flex-1 bg-zinc-100 rounded h-4" />
-            <div className="flex-1 bg-zinc-100 rounded h-4" />
-          </div>
-          <div className="bg-zinc-200 h-1.5 rounded" />
-          <div className="bg-zinc-100 h-1 rounded w-3/4" />
-        </div>
-      </div>
-    );
-  }
-  if (template === "classic") {
-    return (
-      <div className="h-24 bg-white rounded overflow-hidden text-[4px] border border-zinc-100 text-center">
-        <div className="bg-zinc-100 h-4 w-10 rounded mx-auto mt-1.5 mb-1" />
-        <div className="bg-zinc-300 h-1.5 w-14 rounded mx-auto mb-0.5" />
-        <div className="bg-zinc-200 h-1 w-10 rounded mx-auto mb-1.5" />
-        <div className="border-t border-zinc-300 mx-2" />
-        <div className="px-2 pt-1 space-y-1">
-          <div className="bg-zinc-200 h-1.5 rounded" />
-          <div className="bg-zinc-100 h-1 rounded w-3/4 mx-auto" />
-        </div>
-      </div>
-    );
-  }
-  // simple
-  return (
-    <div className="h-24 bg-white rounded overflow-hidden text-[4px] border border-zinc-100">
-      <div className="px-2 pt-2 pb-1 flex justify-between items-start">
-        <div>
-          <div className="bg-zinc-200 h-2 w-10 rounded mb-0.5" />
-          <div className="bg-zinc-100 h-1 w-6 rounded" />
-        </div>
-        <div className="space-y-0.5">
-          <div className="bg-zinc-200 h-1 w-8 rounded" />
-          <div className="bg-zinc-100 h-1 w-6 rounded" />
-        </div>
-      </div>
-      <div className="px-2 space-y-1">
-        <div className="flex gap-1">
-          <div className="flex-1 bg-zinc-100 rounded h-3" />
-          <div className="flex-1 bg-zinc-100 rounded h-3" />
-        </div>
-        <div className="bg-zinc-200 h-1.5 rounded" />
-        <div className="bg-zinc-100 h-1 rounded w-2/3" />
       </div>
     </div>
   );
@@ -391,6 +326,8 @@ export function QuotationSettingsPanel({
           <TemplatePicker
             value={s.template}
             onChange={(t) => set({ template: t as QuotationSettings["template"] })}
+            settings={s}
+            documentLabel={documentLabel}
           />
         </div>
 

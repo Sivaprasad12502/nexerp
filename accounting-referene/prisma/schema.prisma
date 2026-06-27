@@ -1030,11 +1030,17 @@ enum PaymentAccountType {
   OTHER
 }
 
+enum PaymentAccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model PaymentAccount {
   id         String             @id @default(cuid())
   businessId String
   business   Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
   type       PaymentAccountType @default(BANK)
+  status     PaymentAccountStatus @default(ACTIVE)
 
   displayName String
 
@@ -1051,8 +1057,12 @@ model PaymentAccount {
   country             String?
   currency            String?
   swift               String?
+  department          String?
+  ledgerName          String?
   customFields        Json?     // [{ label: string, value: string }]
   linkedBankAccountId String?
+  linkedBankAccount   PaymentAccount?  @relation("LinkedBank", fields: [linkedBankAccountId], references: [id], onDelete: SetNull)
+  linkedUpiAccounts   PaymentAccount[] @relation("LinkedBank")
 
   payments     Payment[]
   vendorLeads  VendorLead[]
@@ -1063,6 +1073,7 @@ model PaymentAccount {
   updatedAt DateTime @updatedAt
 
   @@index([businessId])
+  @@index([businessId, type, status])
 }
 
 // ─── Payment Receipts ─────────────────────────────────────────────────────────

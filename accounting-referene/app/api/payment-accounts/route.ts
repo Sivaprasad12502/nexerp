@@ -2,15 +2,45 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
-import { paymentAccountCreateSchema } from "@/lib/validations/payment-account";
+import {
+  derivePaymentAccountDisplayName,
+  paymentAccountCreateSchema,
+} from "@/lib/validations/payment-account";
+import type { PaymentAccountType, PaymentAccountStatus } from "@/app/generated/prisma/client";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const ctx = await getRbacContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { searchParams } = req.nextUrl;
+  const type = searchParams.get("type") as PaymentAccountType | null;
+  const status = searchParams.get("status") as PaymentAccountStatus | null;
+  const bankOnly = searchParams.get("bankOnly") === "true";
+
+  const where: {
+    businessId: string;
+    type?: PaymentAccountType;
+    status?: PaymentAccountStatus;
+    OR?: Array<{ upiId: null } | { accountNumber: { not: null } }>;
+  } = { businessId: ctx.businessId };
+
+  if (type) where.type = type;
+  if (status) where.status = status;
+
+  // Bank tab: exclude pure UPI-only accounts (upiId set, no account number)
+  if (bankOnly) {
+    where.type = "BANK";
+    where.OR = [{ upiId: null }, { accountNumber: { not: null } }];
+  }
+
   const accounts = await prisma.paymentAccount.findMany({
-    where: { businessId: ctx.businessId },
-    orderBy: { createdAt: "asc" },
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      linkedBankAccount: {
+        select: { id: true, displayName: true, bankName: true },
+      },
+    },
   });
 
   return NextResponse.json({ accounts });
@@ -36,18 +66,13 @@ export async function POST(req: NextRequest) {
   }
 
   const data = result.data;
-
-  // Auto-derive display name if not provided
-  const displayName =
-    data.displayName?.trim() ||
-    (data.bankName && data.accountNumber
-      ? `${data.bankName} ****${data.accountNumber.slice(-4)}`
-      : data.bankName || data.accountHolderName || "Bank Account");
+  const displayName = derivePaymentAccountDisplayName(data);
 
   const account = await prisma.paymentAccount.create({
     data: {
       businessId: ctx.businessId,
       type: data.type,
+      status: data.status ?? "ACTIVE",
       displayName,
       accountHolderName: data.accountHolderName ?? null,
       bankName: data.bankName ?? null,
@@ -59,8 +84,15 @@ export async function POST(req: NextRequest) {
       country: data.country ?? null,
       currency: data.currency ?? null,
       swift: data.swift ?? null,
+      department: data.department ?? null,
+      ledgerName: data.ledgerName ?? null,
       customFields: data.customFields ?? undefined,
       linkedBankAccountId: data.linkedBankAccountId ?? null,
+    },
+    include: {
+      linkedBankAccount: {
+        select: { id: true, displayName: true, bankName: true },
+      },
     },
   });
 

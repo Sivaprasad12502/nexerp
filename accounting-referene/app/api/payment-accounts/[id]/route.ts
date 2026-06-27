@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getRbacContext } from "@/lib/rbac";
-import { paymentAccountUpdateSchema } from "@/lib/validations/payment-account";
+import {
+  derivePaymentAccountDisplayName,
+  paymentAccountUpdateSchema,
+} from "@/lib/validations/payment-account";
 
 export async function PATCH(
   req: NextRequest,
@@ -28,7 +31,6 @@ export async function PATCH(
     );
   }
 
-  // Ensure it belongs to this business
   const existing = await prisma.paymentAccount.findFirst({
     where: { id, businessId: ctx.businessId },
   });
@@ -38,19 +40,22 @@ export async function PATCH(
 
   const data = result.data;
 
-  // Re-derive display name when account/bank name changes
-  const displayName =
-    data.displayName?.trim() ||
-    (data.bankName && data.accountNumber
-      ? `${data.bankName} ****${data.accountNumber.slice(-4)}`
-      : data.bankName ||
-        data.accountHolderName ||
-        existing.displayName);
+  const displayName = derivePaymentAccountDisplayName(
+    {
+      type: existing.type,
+      displayName: data.displayName,
+      bankName: data.bankName ?? existing.bankName,
+      accountNumber: data.accountNumber ?? existing.accountNumber,
+      accountHolderName: data.accountHolderName ?? existing.accountHolderName,
+    },
+    existing.displayName,
+  );
 
   const account = await prisma.paymentAccount.update({
     where: { id },
     data: {
       displayName,
+      status: data.status,
       accountHolderName: data.accountHolderName,
       bankName: data.bankName,
       accountNumber: data.accountNumber,
@@ -61,8 +66,15 @@ export async function PATCH(
       country: data.country,
       currency: data.currency,
       swift: data.swift,
+      department: data.department,
+      ledgerName: data.ledgerName,
       customFields: data.customFields ?? undefined,
       linkedBankAccountId: data.linkedBankAccountId,
+    },
+    include: {
+      linkedBankAccount: {
+        select: { id: true, displayName: true, bankName: true },
+      },
     },
   });
 

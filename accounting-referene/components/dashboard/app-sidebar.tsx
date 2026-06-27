@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,6 +21,7 @@ import {
   type LucideIcon,
   Contact,
   LayoutDashboard,
+  PartyPopper,
 } from "lucide-react";
 
 type NavChild = {
@@ -107,7 +108,12 @@ const items: NavItem[] = [
   {
     label: "Banking & Payments",
     icon: Landmark,
-    href: "/banking-and-payments",
+    children: [
+      { label: "Payment Accounts", href: "/banking-and-payments/payment-accounts" },
+      { label: "Bank Accounts", href: "/banking-and-payments/bank-accounts" },
+      { label: "Employee Accounts", href: "/banking-and-payments/employee-accounts" },
+      { label: "Bank Reconciliation", href: "/banking-and-payments/bank-reconciliation" },
+    ],
   },
   {
     label: "Payroll & HRMS",
@@ -138,6 +144,11 @@ const items: NavItem[] = [
     icon: Cable,
     href: "/business-settings/integrations",
   },
+  {
+    label: "Greetings",
+    icon: PartyPopper,
+    href: "/greetings",
+  },
 ];
 
 export function AppSidebar({
@@ -152,6 +163,15 @@ export function AppSidebar({
   const [hover, setHover] = useState(false);
 
   const [openGroups, setOpenGroups] = useState<string[]>(["Sales & Invoices"]);
+
+  // Auto-expand Banking & Payments when on any banking route
+  useEffect(() => {
+    if (pathname.startsWith("/banking-and-payments")) {
+      setOpenGroups((prev) =>
+        prev.includes("Banking & Payments") ? prev : [...prev, "Banking & Payments"],
+      );
+    }
+  }, [pathname]);
 
   const expanded = pinned || hover;
 
